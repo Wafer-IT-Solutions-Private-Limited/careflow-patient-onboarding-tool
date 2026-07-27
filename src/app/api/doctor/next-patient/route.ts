@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyToken } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
+import { emitSSE } from "@/lib/sse";
 
 // POST /api/doctor/next-patient — complete current consultation and pull next patient
 export async function POST(req: NextRequest) {
@@ -43,10 +44,18 @@ export async function POST(req: NextRequest) {
           consultationStart: now,
         },
       });
+      // Mark doctor engaged while in consultation
+      await prisma.doctor.update({ where: { id: doctor.id }, data: { availability: "ENGAGED" } });
       await logAudit({ userId: jwt.id, userRole: "DOCTOR", action: "START_CONSULTATION", entity: "Visit", entityId: next.id });
+      emitSSE({ type: "patient:called", room: `doctor:${doctor.id}`, token: next.token });
+      emitSSE({ type: "patient:called", room: `patient:${next.patientId}`, token: next.token });
+      emitSSE({ type: "queue:updated", room: "admin" });
       return NextResponse.json({ message: "Next patient started", visit: next });
     }
 
+    // Queue empty — set doctor back to AVAILABLE
+    await prisma.doctor.update({ where: { id: doctor.id }, data: { availability: "AVAILABLE" } });
+    emitSSE({ type: "doctor:status", room: "admin", doctorId: doctor.id, availability: "AVAILABLE" });
     return NextResponse.json({ message: "No more patients in queue", visit: null });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

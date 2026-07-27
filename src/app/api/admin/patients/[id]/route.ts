@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyToken } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isPatientEmail } from "@/lib/validators/auth";
+import bcrypt from "bcryptjs";
 
 async function requireAdmin(req: NextRequest) {
   const token = req.cookies.get("token")?.value;
@@ -38,7 +39,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const { id } = await params;
   const body = await req.json();
-  const { name, email, dateOfBirth, isVerified } = body;
+  const { name, email, dateOfBirth, isVerified, gender, phone, address, city, state, pincode, healthIssues, paymentType, priority } = body;
 
   // Validate email stays patient domain
   if (email && !isPatientEmail(email)) {
@@ -66,19 +67,49 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       select: {
         id: true, name: true, email: true,
         isVerified: true, createdAt: true,
-        patientProfile: { select: { id: true, dateOfBirth: true } },
+        patientProfile: {
+          select: {
+            id: true, prn: true, dateOfBirth: true, gender: true,
+            phone: true, address: true, city: true, state: true,
+            pincode: true, healthIssues: true, paymentType: true, priority: true,
+          },
+        },
       },
     }),
-    // Update dateOfBirth on PatientProfile if provided
-    ...(dateOfBirth !== undefined
-      ? [prisma.patient.updateMany({
-          where: { userId: id },
-          data:  { dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null },
-        })]
-      : []),
+    prisma.patient.updateMany({
+      where: { userId: id },
+      data: {
+        ...(name        !== undefined && { name }),
+        ...(dateOfBirth !== undefined && { dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null }),
+        ...(gender      !== undefined && { gender }),
+        ...(phone       !== undefined && { phone }),
+        ...(address     !== undefined && { address }),
+        ...(city        !== undefined && { city }),
+        ...(state       !== undefined && { state }),
+        ...(pincode     !== undefined && { pincode }),
+        ...(healthIssues !== undefined && { healthIssues }),
+        ...(paymentType !== undefined && { paymentType }),
+        ...(priority    !== undefined && { priority }),
+      },
+    }),
   ]);
 
   return NextResponse.json({ patient: updatedUser });
+}
+
+// PATCH /api/admin/patients/[id] — reset password
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  if (!await requireAdmin(req))
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id } = await params;
+  const { password } = await req.json();
+  if (!password || password.length < 6)
+    return NextResponse.json({ error: "Password must be at least 6 characters" }, { status: 400 });
+
+  const hash = await bcrypt.hash(password, 12);
+  await prisma.user.update({ where: { id }, data: { password: hash } });
+  return NextResponse.json({ success: true });
 }
 
 // DELETE /api/admin/patients/[id]

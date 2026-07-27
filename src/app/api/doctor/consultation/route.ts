@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyToken } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
+import { emitSSE } from "@/lib/sse";
 
 // POST /api/doctor/consultation — save prescription + health notes
 export async function POST(req: NextRequest) {
@@ -16,6 +17,8 @@ export async function POST(req: NextRequest) {
 
     const { visitId, prescription, healthNotes } = await req.json();
     if (!visitId) return NextResponse.json({ error: "visitId is required" }, { status: 400 });
+    if (!prescription?.trim()) return NextResponse.json({ error: "Prescription is required before completing consultation" }, { status: 400 });
+    if (!healthNotes?.trim())  return NextResponse.json({ error: "Health notes are required before completing consultation" }, { status: 400 });
 
     const history = await prisma.patientHistory.findUnique({ where: { visitId } });
     if (!history) return NextResponse.json({ error: "Consultation record not found" }, { status: 404 });
@@ -39,6 +42,7 @@ export async function POST(req: NextRequest) {
     });
 
     await logAudit({ userId: jwt.id, userRole: "DOCTOR", action: "SAVE_CONSULTATION", entity: "PatientHistory", entityId: updated.id });
+    emitSSE({ type: "queue:updated", room: "admin" });
     return NextResponse.json({ history: updated });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

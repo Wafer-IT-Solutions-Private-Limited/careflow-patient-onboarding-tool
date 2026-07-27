@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import toast from "react-hot-toast";
+import AdminHeader from "@/components/admin/AdminHeader";
 
 interface Stats {
   totalPatients: number; totalDoctors: number; todayVisits: number;
@@ -28,139 +28,182 @@ export default function AdminDashboard() {
   const [stats, setStats]   = useState<Stats | null>(null);
   const [queue, setQueue]   = useState<QueueVisit[]>([]);
   const [loading, setLoading] = useState(true);
+  const [cancelling, setCancelling] = useState<string | null>(null);
+  const [cancelModal, setCancelModal] = useState<QueueVisit | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
 
-  const logout = async () => {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/login");
+  const load = async () => {
+    const [s, q] = await Promise.all([
+      fetch("/api/admin/stats").then(r => { if (r.status === 403) router.push("/login"); return r.json(); }),
+      fetch("/api/queue").then(r => r.json()),
+    ]);
+    setStats(s);
+    setQueue(q.visits ?? []);
   };
 
   useEffect(() => {
-    Promise.all([
-      fetch("/api/admin/stats").then(r => { if (r.status === 403) router.push("/login"); return r.json(); }),
-      fetch("/api/queue").then(r => r.json()),
-    ]).then(([s, q]) => {
-      setStats(s);
-      setQueue(q.visits ?? []);
-    }).catch(() => toast.error("Failed to load")).finally(() => setLoading(false));
+    load().catch(() => toast.error("Failed to load")).finally(() => setLoading(false));
+
+    const es = new EventSource("/api/sse");
+    es.onmessage = (e) => {
+      try {
+        const event = JSON.parse(e.data);
+        if (["queue:updated","visit:cancelled","doctor:status","patient:called","patient:registered"].includes(event.type)) load();
+      } catch { /* ignore */ }
+    };
+    return () => es.close();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (loading) return <div style={S.loading}>Loading…</div>;
+  const cancelVisit = async () => {
+    if (!cancelModal) return;
+    setCancelling(cancelModal.id);
+    try {
+      const res = await fetch(`/api/admin/visits/${cancelModal.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: cancelReason || "Cancelled by admin" }),
+      });
+      if (res.ok) { toast.success("Visit cancelled"); setCancelModal(null); setCancelReason(""); await load(); }
+      else { const d = await res.json(); toast.error(d.error ?? "Failed"); }
+    } finally { setCancelling(null); }
+  };
+
+  const activeQueue = queue.filter(v => !["COMPLETED","CANCELLED"].includes(v.status));
 
   return (
     <div style={S.page}>
-      <header style={S.header}>
-        <div style={S.headerInner}>
-          <div style={S.brand}>
-            <img src="/waferlogo.png" alt="Wafer" style={S.logo} />
-            <span style={S.brandName}>Admin Dashboard</span>
-          </div>
-          <div style={S.headerRight}>
-            <Link href="/admin/patients" style={S.navLink}>Patients</Link>
-            <Link href="/admin/doctors"  style={S.navLink}>Doctors</Link>
-            <Link href="/walk-in"        style={S.navLink}>Walk-In</Link>
-            <button style={S.logoutBtn} onClick={logout}>Sign Out</button>
-          </div>
-        </div>
-      </header>
+      <AdminHeader />
 
       <main style={S.main}>
-        <h1 style={S.pageTitle}>Today's Overview</h1>
+        {loading ? (
+          <div style={S.loadingText}>Loading…</div>
+        ) : (
+          <>
+            <h1 style={S.pageTitle}>Today&apos;s Overview</h1>
 
-        {/* Stats */}
-        {stats && (
-          <div style={S.statsGrid}>
-            {[
-              { label: "Total Patients",     value: stats.totalPatients,    icon: "👥" },
-              { label: "Approved Doctors",   value: stats.totalDoctors,     icon: "👨‍⚕️" },
-              { label: "Available Doctors",  value: stats.availableDoctors, icon: "✅" },
-              { label: "Today's Visits",     value: stats.todayVisits,      icon: "📋" },
-              { label: "Waiting",            value: stats.waitingCount,     icon: "⏳" },
-              { label: "In Consultation",    value: stats.inConsultation,   icon: "🩺" },
-              { label: "Completed Today",    value: stats.completedToday,   icon: "✔️" },
-            ].map(({ label, value, icon }) => (
-              <div key={label} style={S.statCard}>
-                <div style={S.statIcon}>{icon}</div>
-                <div style={S.statNum}>{value}</div>
-                <div style={S.statLabel}>{label}</div>
+            {stats && (
+              <div style={S.statsGrid}>
+                {[
+                  { label: "Total Patients",    value: stats.totalPatients,    icon: "👥" },
+                  { label: "Approved Doctors",  value: stats.totalDoctors,     icon: "👨‍⚕️" },
+                  { label: "Available Doctors", value: stats.availableDoctors, icon: "✅" },
+                  { label: "Today's Visits",    value: stats.todayVisits,      icon: "📋" },
+                  { label: "Waiting",           value: stats.waitingCount,     icon: "⏳" },
+                  { label: "In Consultation",   value: stats.inConsultation,   icon: "🩺" },
+                  { label: "Completed Today",   value: stats.completedToday,   icon: "✔️" },
+                ].map(({ label, value, icon }) => (
+                  <div key={label} style={S.statCard}>
+                    <div style={S.statIcon}>{icon}</div>
+                    <div style={S.statNum}>{value}</div>
+                    <div style={S.statLabel}>{label}</div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        )}
+            )}
 
-        {/* Quick actions */}
-        <div style={S.actionRow}>
-          <Link href="/walk-in" style={S.actionBtn}>+ Register Walk-In Patient</Link>
-          <Link href="/admin/patients" style={{ ...S.actionBtn, background: "transparent", color: "#0C1929", border: "1.5px solid #0C1929" }}>Manage Patients</Link>
-          <Link href="/admin/doctors"  style={{ ...S.actionBtn, background: "transparent", color: "#0C1929", border: "1.5px solid #0C1929" }}>Manage Doctors</Link>
-        </div>
-
-        {/* Live Queue */}
-        <div style={S.section}>
-          <div style={S.sectionTitle}>Live Queue</div>
-          {queue.length === 0 ? (
-            <div style={S.emptyQueue}>No visits today yet.</div>
-          ) : (
-            <div style={S.tableWrap}>
-              <table style={S.table}>
-                <thead>
-                  <tr>
-                    {["Token", "Patient", "PRN", "Doctor", "Status", "Position"].map(h => (
-                      <th key={h} style={S.th}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {queue.map(v => (
-                    <tr key={v.id} style={S.tr}>
-                      <td style={{ ...S.td, fontWeight: 800, fontSize: 16 }}>{v.token}</td>
-                      <td style={S.td}>{v.patient.name}</td>
-                      <td style={{ ...S.td, color: "#888", fontSize: 12 }}>{v.patient.prn}</td>
-                      <td style={S.td}>{v.doctor?.user.name ?? <span style={{ color: "#aaa" }}>Unassigned</span>}</td>
-                      <td style={S.td}>
-                        <span style={{ ...S.statusPill, background: (STATUS_COLOR[v.status] ?? "#888") + "22", color: STATUS_COLOR[v.status] ?? "#888" }}>
-                          {v.status.replace("_", " ")}
-                        </span>
-                      </td>
-                      <td style={{ ...S.td, textAlign: "center" }}>{v.queue?.queuePosition ?? "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div style={S.actionRow}>
+              <button style={S.actionBtn} onClick={() => router.push("/walk-in")}>+ Register Walk-In Patient</button>
             </div>
-          )}
-        </div>
+
+            <div style={S.section}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+                <div style={S.sectionTitle}>Live Queue ({activeQueue.length} active)</div>
+              </div>
+              {activeQueue.length === 0 ? (
+                <div style={S.emptyQueue}>No active visits right now.</div>
+              ) : (
+                <div style={S.tableWrap}>
+                  <table style={S.table}>
+                    <thead>
+                      <tr>
+                        {["Token", "Patient", "PRN", "Doctor", "Status", "Pos", "Action"].map(h => (
+                          <th key={h} style={S.th}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {activeQueue.map(v => (
+                        <tr key={v.id} style={S.tr}>
+                          <td style={{ ...S.td, fontWeight: 800, fontSize: 16 }}>{v.token}</td>
+                          <td style={S.td}>{v.patient.name}</td>
+                          <td style={{ ...S.td, color: "#888", fontSize: 12 }}>{v.patient.prn}</td>
+                          <td style={S.td}>{v.doctor?.user.name ?? <span style={{ color: "#aaa" }}>Unassigned</span>}</td>
+                          <td style={S.td}>
+                            <span style={{ ...S.statusPill, background: (STATUS_COLOR[v.status] ?? "#888") + "22", color: STATUS_COLOR[v.status] ?? "#888" }}>
+                              {v.status.replace(/_/g, " ")}
+                            </span>
+                          </td>
+                          <td style={{ ...S.td, textAlign: "center" }}>{v.queue?.queuePosition ?? "—"}</td>
+                          <td style={S.td}>
+                            <button
+                              style={S.cancelBtn}
+                              onClick={() => { setCancelModal(v); setCancelReason(""); }}
+                              disabled={cancelling === v.id}
+                            >
+                              Cancel
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </main>
+
+      {cancelModal && (
+        <div style={S.modalOverlay} onClick={() => setCancelModal(null)}>
+          <div style={S.modal} onClick={e => e.stopPropagation()}>
+            <h3 style={S.modalTitle}>Cancel Visit</h3>
+            <p style={S.modalSub}>Cancel token <strong>{cancelModal.token}</strong> for <strong>{cancelModal.patient.name}</strong>?</p>
+            <div style={{ marginBottom: 16 }}>
+              <label style={S.fieldLabel}>Reason (optional)</label>
+              <input style={S.input} value={cancelReason} onChange={e => setCancelReason(e.target.value)} placeholder="Reason for cancellation…" />
+            </div>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button style={S.modalCancelBtn} onClick={() => setCancelModal(null)}>Keep Visit</button>
+              <button style={S.modalConfirmBtn} onClick={cancelVisit} disabled={!!cancelling}>
+                {cancelling ? "Cancelling…" : "Yes, Cancel"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 const S: Record<string, React.CSSProperties> = {
-  loading:     { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "system-ui,sans-serif", color: "#888" },
-  page:        { minHeight: "100vh", background: "#F5F4F2", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif" },
-  header:      { background: "#0C1929", padding: "0 24px" },
-  headerInner: { maxWidth: 1200, margin: "0 auto", height: 60, display: "flex", alignItems: "center", justifyContent: "space-between" },
-  brand:       { display: "flex", alignItems: "center", gap: 10 },
-  logo:        { height: 28, filter: "brightness(0) invert(1)" },
-  brandName:   { fontSize: 15, fontWeight: 700, color: "#fff" },
-  headerRight: { display: "flex", alignItems: "center", gap: 12 },
-  navLink:     { fontSize: 13.5, color: "rgba(255,255,255,.75)", textDecoration: "none", fontWeight: 500 },
-  logoutBtn:   { fontSize: 12.5, color: "rgba(255,255,255,.6)", background: "transparent", border: "1px solid rgba(255,255,255,.2)", borderRadius: 8, padding: "5px 12px", cursor: "pointer" },
-  main:        { maxWidth: 1200, margin: "0 auto", padding: "32px 24px" },
-  pageTitle:   { fontSize: 22, fontWeight: 700, color: "#0C1929", marginBottom: 24 },
-  statsGrid:   { display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 12, marginBottom: 24 },
-  statCard:    { background: "#fff", borderRadius: 12, padding: "16px 14px", boxShadow: "0 1px 4px rgba(0,0,0,.05)", border: "1.5px solid #E8E6E3", textAlign: "center" },
-  statIcon:    { fontSize: 20, marginBottom: 6 },
-  statNum:     { fontSize: 26, fontWeight: 800, color: "#0C1929", lineHeight: 1, marginBottom: 4 },
-  statLabel:   { fontSize: 11, color: "#888", fontWeight: 600, lineHeight: 1.3 },
-  actionRow:   { display: "flex", gap: 10, marginBottom: 28 },
-  actionBtn:   { padding: "10px 20px", background: "#0C1929", color: "#fff", borderRadius: 9, fontSize: 13.5, fontWeight: 600, textDecoration: "none", border: "none", cursor: "pointer" },
-  section:     { background: "#fff", borderRadius: 14, padding: "24px", boxShadow: "0 1px 6px rgba(0,0,0,.05)" },
-  sectionTitle:{ fontSize: 15, fontWeight: 700, color: "#0C1929", marginBottom: 16 },
-  emptyQueue:  { fontSize: 14, color: "#aaa", textAlign: "center", padding: "40px 0" },
-  tableWrap:   { overflowX: "auto" },
-  table:       { width: "100%", borderCollapse: "collapse" },
-  th:          { fontSize: 11, fontWeight: 700, color: "#999", letterSpacing: ".07em", textTransform: "uppercase", padding: "8px 12px", textAlign: "left", borderBottom: "1px solid #E8E6E3" },
-  tr:          { borderBottom: "1px solid #F0EEEB" },
-  td:          { padding: "12px 12px", fontSize: 13.5, color: "#333" },
-  statusPill:  { fontSize: 11.5, fontWeight: 700, padding: "3px 10px", borderRadius: 12 },
+  page:           { minHeight: "100vh", background: "#F5F4F2", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif" },
+  main:           { maxWidth: 1280, margin: "0 auto", padding: "32px 24px" },
+  loadingText:    { padding: "60px 0", textAlign: "center" as const, color: "#aaa" },
+  pageTitle:      { fontSize: 22, fontWeight: 700, color: "#0C1929", marginBottom: 24 },
+  statsGrid:      { display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 12, marginBottom: 24 },
+  statCard:       { background: "#fff", borderRadius: 12, padding: "16px 14px", boxShadow: "0 1px 4px rgba(0,0,0,.05)", border: "1.5px solid #E8E6E3", textAlign: "center" as const },
+  statIcon:       { fontSize: 20, marginBottom: 6 },
+  statNum:        { fontSize: 26, fontWeight: 800, color: "#0C1929", lineHeight: 1, marginBottom: 4 },
+  statLabel:      { fontSize: 11, color: "#888", fontWeight: 600, lineHeight: 1.3 },
+  actionRow:      { display: "flex", gap: 10, marginBottom: 24 },
+  actionBtn:      { padding: "10px 20px", background: "#0C1929", color: "#fff", borderRadius: 9, fontSize: 13.5, fontWeight: 600, border: "none", cursor: "pointer" },
+  section:        { background: "#fff", borderRadius: 14, padding: "24px", boxShadow: "0 1px 6px rgba(0,0,0,.05)" },
+  sectionTitle:   { fontSize: 15, fontWeight: 700, color: "#0C1929" },
+  emptyQueue:     { fontSize: 14, color: "#aaa", textAlign: "center" as const, padding: "40px 0" },
+  tableWrap:      { overflowX: "auto" as const },
+  table:          { width: "100%", borderCollapse: "collapse" as const },
+  th:             { fontSize: 11, fontWeight: 700, color: "#999", letterSpacing: ".07em", textTransform: "uppercase" as const, padding: "8px 12px", textAlign: "left" as const, borderBottom: "1px solid #E8E6E3" },
+  tr:             { borderBottom: "1px solid #F0EEEB" },
+  td:             { padding: "12px 12px", fontSize: 13.5, color: "#333" },
+  statusPill:     { fontSize: 11.5, fontWeight: 700, padding: "3px 10px", borderRadius: 12 },
+  cancelBtn:      { padding: "5px 12px", background: "#FEE2E2", color: "#DC2626", border: "1px solid #FECACA", borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: "pointer" },
+  modalOverlay:   { position: "fixed" as const, inset: 0, background: "rgba(0,0,0,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 },
+  modal:          { background: "#fff", borderRadius: 16, padding: "28px 32px", width: "100%", maxWidth: 420, boxShadow: "0 20px 60px rgba(0,0,0,.18)" },
+  modalTitle:     { fontSize: 17, fontWeight: 700, color: "#0C1929", marginBottom: 8 },
+  modalSub:       { fontSize: 13.5, color: "#555", marginBottom: 20, lineHeight: 1.5 },
+  fieldLabel:     { display: "block", fontSize: 11, fontWeight: 700, color: "#666", letterSpacing: ".07em", textTransform: "uppercase" as const, marginBottom: 6 },
+  input:          { width: "100%", padding: "10px 14px", border: "1.5px solid #E2E0DC", borderRadius: 9, fontSize: 14, outline: "none", boxSizing: "border-box" as const },
+  modalCancelBtn: { padding: "10px 18px", background: "transparent", color: "#555", border: "1.5px solid #D0CEC9", borderRadius: 9, fontSize: 13.5, fontWeight: 600, cursor: "pointer" },
+  modalConfirmBtn:{ padding: "10px 18px", background: "#DC2626", color: "#fff", border: "none", borderRadius: 9, fontSize: 13.5, fontWeight: 600, cursor: "pointer" },
 };

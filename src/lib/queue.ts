@@ -1,7 +1,7 @@
 import { prisma } from "./prisma";
 
 const ACTIVE_STATUSES = ["WAITING", "ASSIGNED", "IN_CONSULTATION"] as const;
-const AVG_CONSULTATION_MINUTES = 10;
+const AVG_CONSULTATION_MINUTES = 15;
 
 export async function assignDoctor(): Promise<string | null> {
   const doctors = await prisma.doctor.findMany({

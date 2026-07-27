@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyToken } from "@/lib/auth";
+import { todayISTStart } from "@/lib/timezone";
 
 // GET /api/doctor/dashboard
 export async function GET(req: NextRequest) {
@@ -16,7 +17,7 @@ export async function GET(req: NextRequest) {
     });
     if (!doctor) return NextResponse.json({ error: "Doctor profile not found" }, { status: 404 });
 
-    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+    const todayStart = todayISTStart();
 
     const [currentVisit, queuedVisits, todayCompleted] = await Promise.all([
       prisma.visit.findFirst({
@@ -29,7 +30,7 @@ export async function GET(req: NextRequest) {
       }),
       prisma.visit.findMany({
         where: { doctorId: doctor.id, status: "ASSIGNED", visitDate: { gte: todayStart } },
-        include: { patient: { select: { prn: true, name: true, gender: true, priority: true } } },
+        include: { patient: { select: { id: true, prn: true, name: true, gender: true, priority: true, healthIssues: true } } },
         orderBy: { queuePosition: "asc" },
       }),
       prisma.visit.count({

@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import toast from "react-hot-toast";
+import AdminHeader from "@/components/admin/AdminHeader";
 
 interface Doctor {
   id: string; licenseNumber: string; specialization: string;
@@ -12,36 +12,87 @@ interface Doctor {
   _count: { visits: number };
 }
 
+type EditForm = { name: string; email: string; licenseNumber: string; specialization: string; approved: boolean };
+
+const AVAIL_COLOR: Record<string, string> = {
+  AVAILABLE: "#059669", ENGAGED: "#D97706", OFFLINE: "#9CA3AF",
+};
+
 export default function AdminDoctorsPage() {
   const router = useRouter();
-  const [doctors, setDoctors] = useState<Doctor[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showAdd, setShowAdd] = useState(false);
-  const [saving, setSaving]   = useState(false);
-  const [form, setForm]       = useState({ name: "", email: "", password: "", licenseNumber: "", specialization: "", approved: true });
+  const [doctors,   setDoctors]   = useState<Doctor[]>([]);
+  const [loading,   setLoading]   = useState(true);
+  const [showAdd,   setShowAdd]   = useState(false);
+  const [saving,    setSaving]    = useState(false);
+  const [addForm,   setAddForm]   = useState({ name: "", email: "", password: "", licenseNumber: "", specialization: "", approved: true });
+
+  const [editing,   setEditing]   = useState<Doctor | null>(null);
+  const [editForm,  setEditForm]  = useState<EditForm | null>(null);
+  const [editSaving,setEditSaving]= useState(false);
+
+  const [resetPwd,  setResetPwd]  = useState<Doctor | null>(null);
+  const [newPwd,    setNewPwd]    = useState("");
+  const [pwdBusy,   setPwdBusy]  = useState(false);
 
   const logout = async () => { await fetch("/api/auth/logout", { method: "POST" }); router.push("/login"); };
 
-  const load = () => fetch("/api/admin/doctors").then(r => { if (r.status === 403) router.push("/login"); return r.json(); })
-    .then(d => setDoctors(d.doctors ?? [])).finally(() => setLoading(false));
+  const load = () =>
+    fetch("/api/admin/doctors")
+      .then(r => { if (r.status === 403) router.push("/login"); return r.json(); })
+      .then(d => setDoctors(d.doctors ?? []))
+      .finally(() => setLoading(false));
 
   useEffect(() => { load(); }, []);
 
   const addDoctor = async () => {
-    if (!form.name || !form.email || !form.password || !form.licenseNumber || !form.specialization)
+    if (!addForm.name || !addForm.email || !addForm.password || !addForm.licenseNumber || !addForm.specialization)
       return toast.error("All fields required");
     setSaving(true);
     const res = await fetch("/api/admin/doctors", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify(addForm),
     });
     const d = await res.json();
     if (!res.ok) { toast.error(d.error ?? "Failed"); setSaving(false); return; }
     toast.success("Doctor added");
     setShowAdd(false);
-    setForm({ name: "", email: "", password: "", licenseNumber: "", specialization: "", approved: true });
+    setAddForm({ name: "", email: "", password: "", licenseNumber: "", specialization: "", approved: true });
     await load();
     setSaving(false);
+  };
+
+  const openEdit = (doc: Doctor) => {
+    setEditing(doc);
+    setEditForm({ name: doc.user.name, email: doc.user.email, licenseNumber: doc.licenseNumber, specialization: doc.specialization, approved: doc.approved });
+  };
+
+  const saveEdit = async () => {
+    if (!editing || !editForm) return;
+    setEditSaving(true);
+    const res = await fetch(`/api/admin/doctors/${editing.id}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(editForm),
+    });
+    const d = await res.json();
+    if (!res.ok) { toast.error(d.error ?? "Update failed"); setEditSaving(false); return; }
+    toast.success("Doctor updated");
+    setEditing(null); setEditForm(null);
+    await load();
+    setEditSaving(false);
+  };
+
+  const resetPassword = async () => {
+    if (!resetPwd || !newPwd.trim()) return;
+    if (newPwd.length < 6) { toast.error("Password must be at least 6 characters"); return; }
+    setPwdBusy(true);
+    const res = await fetch(`/api/admin/doctors/${resetPwd.id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: newPwd }),
+    });
+    if (!res.ok) { const d = await res.json(); toast.error(d.error ?? "Failed"); setPwdBusy(false); return; }
+    toast.success("Password reset successfully");
+    setResetPwd(null); setNewPwd("");
+    setPwdBusy(false);
   };
 
   const toggleApproval = async (doc: Doctor) => {
@@ -64,19 +115,7 @@ export default function AdminDoctorsPage() {
 
   return (
     <div style={S.page}>
-      <header style={S.header}>
-        <div style={S.headerInner}>
-          <div style={S.brand}>
-            <img src="/waferlogo.png" alt="Wafer" style={S.logo} />
-            <span style={S.brandName}>Doctor Management</span>
-          </div>
-          <div style={S.headerRight}>
-            <Link href="/admin" style={S.navLink}>← Dashboard</Link>
-            <button style={S.logoutBtn} onClick={logout}>Sign Out</button>
-          </div>
-        </div>
-      </header>
-
+      <AdminHeader />
       <main style={S.main}>
         <div style={S.topRow}>
           <h1 style={S.pageTitle}>Doctors ({doctors.length})</h1>
@@ -88,24 +127,24 @@ export default function AdminDoctorsPage() {
           <div style={S.formCard}>
             <div style={S.formTitle}>Add New Doctor</div>
             <div style={S.grid2}>
-              {[
+              {([
                 ["Full Name",       "name",           "text",     "Dr. Jane Doe"],
                 ["Email",          "email",          "email",    "dr.jane@hospital.com"],
                 ["Password",       "password",       "password", "Min 8 characters"],
                 ["License Number", "licenseNumber",  "text",     "LIC-2024-XXX"],
                 ["Specialization", "specialization", "text",     "Cardiology"],
-              ].map(([label, key, type, placeholder]) => (
+              ] as [string, string, string, string][]).map(([label, key, type, placeholder]) => (
                 <div key={key} style={S.field}>
                   <label style={S.label}>{label}</label>
                   <input style={S.input} type={type} placeholder={placeholder}
-                    value={(form as Record<string, string>)[key]}
-                    onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} />
+                    value={(addForm as Record<string, string>)[key]}
+                    onChange={e => setAddForm(f => ({ ...f, [key]: e.target.value }))} />
                 </div>
               ))}
               <div style={S.field}>
                 <label style={S.label}>Auto-Approve</label>
-                <select style={S.input} value={form.approved ? "yes" : "no"}
-                  onChange={e => setForm(f => ({ ...f, approved: e.target.value === "yes" }))}>
+                <select style={S.input} value={addForm.approved ? "yes" : "no"}
+                  onChange={e => setAddForm(f => ({ ...f, approved: e.target.value === "yes" }))}>
                   <option value="yes">Yes</option>
                   <option value="no">No (pending review)</option>
                 </select>
@@ -123,7 +162,7 @@ export default function AdminDoctorsPage() {
           <div style={S.tableWrap}>
             <table style={S.table}>
               <thead>
-                <tr>{["Doctor", "Email", "Specialization", "License", "Visits", "Status", "Actions"].map(h => <th key={h} style={S.th}>{h}</th>)}</tr>
+                <tr>{["Doctor", "Email", "Specialization", "License", "Visits", "Availability", "Status", "Actions"].map(h => <th key={h} style={S.th}>{h}</th>)}</tr>
               </thead>
               <tbody>
                 {doctors.map(doc => (
@@ -134,12 +173,19 @@ export default function AdminDoctorsPage() {
                     <td style={{ ...S.td, fontSize: 12 }}>{doc.licenseNumber}</td>
                     <td style={{ ...S.td, textAlign: "center" }}>{doc._count.visits}</td>
                     <td style={S.td}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: AVAIL_COLOR[doc.availability] ?? "#888" }}>
+                        {doc.availability}
+                      </span>
+                    </td>
+                    <td style={S.td}>
                       <span style={{ ...S.pill, background: doc.approved ? "#D1FAE5" : "#FEF3C7", color: doc.approved ? "#065F46" : "#92400E" }}>
                         {doc.approved ? "Approved" : "Pending"}
                       </span>
                     </td>
                     <td style={S.td}>
                       <div style={S.actBtns}>
+                        <button style={{ ...S.actBtn, color: "#2563EB" }} onClick={() => openEdit(doc)}>Edit</button>
+                        <button style={{ ...S.actBtn, color: "#D97706" }} onClick={() => { setResetPwd(doc); setNewPwd(""); }}>Reset Pwd</button>
                         <button style={{ ...S.actBtn, color: doc.approved ? "#D97706" : "#059669" }} onClick={() => toggleApproval(doc)}>
                           {doc.approved ? "Suspend" : "Approve"}
                         </button>
@@ -153,9 +199,68 @@ export default function AdminDoctorsPage() {
           </div>
         </div>
       </main>
+
+      {/* Edit Doctor Modal */}
+      {editing && editForm && (
+        <div style={overlay}>
+          <div style={{ ...modal, maxWidth: 480 }}>
+            <div style={modalHdr}>Edit Doctor — {editing.user.name}</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 16px", marginBottom: 20 }}>
+              {([
+                { key: "name",           label: "Full Name",     type: "text"  },
+                { key: "email",          label: "Email",         type: "email" },
+                { key: "licenseNumber",  label: "License Number",type: "text"  },
+                { key: "specialization", label: "Specialization",type: "text"  },
+              ] as { key: keyof EditForm; label: string; type: string }[]).map(({ key, label, type }) => (
+                <div key={key}>
+                  <label style={lbl}>{label}</label>
+                  <input type={type} style={inp} value={editForm[key] as string}
+                    onChange={e => setEditForm({ ...editForm, [key]: e.target.value })} />
+                </div>
+              ))}
+              <div>
+                <label style={lbl}>Approval Status</label>
+                <select style={inp} value={editForm.approved ? "yes" : "no"}
+                  onChange={e => setEditForm({ ...editForm, approved: e.target.value === "yes" })}>
+                  <option value="yes">Approved</option>
+                  <option value="no">Pending / Suspended</option>
+                </select>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => { setEditing(null); setEditForm(null); }} style={cancelBtn}>Cancel</button>
+              <button onClick={saveEdit} disabled={editSaving} style={primaryBtn}>{editSaving ? "Saving…" : "Save Changes"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Password Modal */}
+      {resetPwd && (
+        <div style={overlay}>
+          <div style={{ ...modal, maxWidth: 360 }}>
+            <div style={modalHdr}>Reset Password — {resetPwd.user.name}</div>
+            <label style={lbl}>New Password</label>
+            <input type="password" style={{ ...inp, marginBottom: 20 }} value={newPwd}
+              onChange={e => setNewPwd(e.target.value)} placeholder="Min 6 characters" />
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => { setResetPwd(null); setNewPwd(""); }} style={cancelBtn}>Cancel</button>
+              <button onClick={resetPassword} disabled={pwdBusy} style={primaryBtn}>{pwdBusy ? "Resetting…" : "Reset Password"}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+const overlay: React.CSSProperties = { position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 };
+const modal:   React.CSSProperties = { background: "#fff", borderRadius: 18, padding: 28, width: "100%", boxShadow: "0 20px 60px rgba(0,0,0,.15)", maxHeight: "90vh", overflowY: "auto" };
+const modalHdr:React.CSSProperties = { fontSize: 17, fontWeight: 700, color: "#111", marginBottom: 20 };
+const lbl:     React.CSSProperties = { display: "block", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".06em", color: "#666", marginBottom: 5 };
+const inp:     React.CSSProperties = { width: "100%", padding: "9px 12px", border: "1.5px solid #E2E0DC", borderRadius: 8, fontSize: 14, outline: "none", boxSizing: "border-box" };
+const cancelBtn: React.CSSProperties = { flex: 1, padding: "10px", border: "1.5px solid #E2E0DC", borderRadius: 9, fontSize: 14, fontWeight: 600, cursor: "pointer", background: "#fff", color: "#555" };
+const primaryBtn:React.CSSProperties = { flex: 1, padding: "10px", border: "none", borderRadius: 9, fontSize: 14, fontWeight: 600, cursor: "pointer", background: "#0C1929", color: "#fff" };
 
 const S: Record<string, React.CSSProperties> = {
   loading:     { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "system-ui,sans-serif", color: "#888" },
@@ -189,6 +294,6 @@ const S: Record<string, React.CSSProperties> = {
   td:          { padding: "13px 14px", fontSize: 13.5, color: "#333" },
   doctorName:  { fontWeight: 600, color: "#0C1929" },
   pill:        { fontSize: 11.5, fontWeight: 700, padding: "3px 10px", borderRadius: 12 },
-  actBtns:     { display: "flex", gap: 8 },
-  actBtn:      { background: "none", border: "none", fontSize: 13, fontWeight: 600, cursor: "pointer", padding: "2px 0" },
+  actBtns:     { display: "flex", gap: 10 },
+  actBtn:      { background: "none", border: "none", fontSize: 12.5, fontWeight: 600, cursor: "pointer", padding: "2px 0" },
 };

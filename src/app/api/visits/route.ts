@@ -4,6 +4,7 @@ import { generateToken, generateVisitId } from "@/lib/counters";
 import { assignDoctor, getQueuePosition } from "@/lib/queue";
 import { logAudit } from "@/lib/audit";
 import { verifyToken } from "@/lib/auth";
+import { todayISTStart } from "@/lib/timezone";
 
 // POST /api/visits — create a new visit (walk-in or revisit)
 export async function POST(req: NextRequest) {
@@ -18,8 +19,8 @@ export async function POST(req: NextRequest) {
     const patient = await prisma.patient.findUnique({ where: { id: patientId } });
     if (!patient) return NextResponse.json({ error: "Patient not found" }, { status: 404 });
 
-    // Check if patient already has an active visit today
-    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+    // Check if patient already has an active visit today (IST)
+    const todayStart = todayISTStart();
     const existing = await prisma.visit.findFirst({
       where: {
         patientId,

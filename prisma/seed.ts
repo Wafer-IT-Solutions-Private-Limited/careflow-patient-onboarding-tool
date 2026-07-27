@@ -69,6 +69,7 @@ async function main() {
           dateOfBirth: new Date("1990-05-15"),
           gender: "Male",
           phone: "9876543210",
+          healthSetupComplete: true,
         },
       },
     },

@@ -21,7 +21,13 @@ export async function GET(req: NextRequest) {
     select: {
       id: true, name: true, email: true,
       isVerified: true, createdAt: true,
-      patientProfile: { select: { id: true, dateOfBirth: true } },
+      patientProfile: {
+        select: {
+          id: true, prn: true, dateOfBirth: true, gender: true,
+          phone: true, address: true, city: true, state: true,
+          pincode: true, healthIssues: true, paymentType: true, priority: true,
+        },
+      },
     },
   });
 

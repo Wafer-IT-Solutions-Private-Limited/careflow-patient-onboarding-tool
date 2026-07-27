@@ -22,11 +22,13 @@ enum DoctorAvailability {
 }
 
 enum VisitStatus {
+  SCHEDULED
   WAITING
   ASSIGNED
   IN_CONSULTATION
   COMPLETED
   CANCELLED
+  NO_SHOW
 }
 
 // ── Auth user ─────────────────────────────────────────────────────────────────
@@ -67,22 +69,24 @@ model Doctor {
 // userId is nullable — walk-in patients have no User account.
 
 model Patient {
-  id           String    @id @default(cuid())
-  userId       String?   @unique
-  user         User?     @relation(fields: [userId], references: [id])
-  prn          String    @unique      // PAT-YYYYMMDD-XXXX — never changes
-  name         String
-  dateOfBirth  DateTime?
-  gender       String?
-  phone        String?
-  address      String?
-  city         String?
-  state        String?
-  pincode      String?
-  healthIssues String?
-  paymentType  String?
-  priority     String    @default("NORMAL")
-  createdAt    DateTime  @default(now())
+  id                  String    @id @default(cuid())
+  userId              String?   @unique
+  user                User?     @relation(fields: [userId], references: [id])
+  prn                 String    @unique      // PAT-YYYYMMDD-XXXX — never changes
+  name                String
+  dateOfBirth         DateTime?
+  gender              String?
+  phone               String?
+  address             String?
+  city                String?
+  state               String?
+  pincode             String?
+  healthIssues        String?
+  paymentType         String?
+  priority            String    @default("NORMAL")
+  aadhaarHash         String?   @unique      // SHA-256 of Aadhaar — for duplicate detection only
+  healthSetupComplete Boolean   @default(false)
+  createdAt           DateTime  @default(now())
 
   visits    Visit[]
   histories PatientHistory[]
@@ -91,16 +95,19 @@ model Patient {
 // ── Visit  (one per patient per day; new token each visit) ───────────────────
 
 model Visit {
-  id            String      @id @default(cuid())
-  visitId       String      @unique   // VIS-YYYYMMDD-XXXXX
-  token         String                // A001, A002 … resets daily
-  patientId     String
-  doctorId      String?
-  visitDate     DateTime    @default(now())
-  status        VisitStatus @default(WAITING)
-  queuePosition Int?
-  priority      String      @default("NORMAL")
-  createdAt     DateTime    @default(now())
+  id              String      @id @default(cuid())
+  visitId         String      @unique   // VIS-YYYYMMDD-XXXXX
+  token           String                // A001, A002 … resets daily
+  patientId       String
+  doctorId        String?
+  visitDate       DateTime    @default(now())
+  appointmentDate DateTime?             // set for future scheduled appointments
+  healthIssue     String?               // per-visit presenting complaint
+  status          VisitStatus @default(WAITING)
+  queuePosition   Int?
+  priority        String      @default("NORMAL")
+  cancelReason    String?
+  createdAt       DateTime    @default(now())
 
   patient Patient  @relation(fields: [patientId], references: [id])
   doctor  Doctor?  @relation(fields: [doctorId], references: [id])

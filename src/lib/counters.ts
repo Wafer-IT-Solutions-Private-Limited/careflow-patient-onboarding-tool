@@ -1,7 +1,8 @@
 import { prisma } from "./prisma";
+import { todayISTStr } from "./timezone";
 
 function todayStr(): string {
-  return new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  return todayISTStr();
 }
 
 async function nextCount(type: string): Promise<number> {
