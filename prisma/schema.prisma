@@ -7,11 +7,29 @@ datasource db {
   provider = "postgresql"
 }
 
+// ── Enums ─────────────────────────────────────────────────────────────────────
+
 enum Role {
   ADMIN
   DOCTOR
   PATIENT
 }
+
+enum DoctorAvailability {
+  AVAILABLE
+  ENGAGED
+  OFFLINE
+}
+
+enum VisitStatus {
+  WAITING
+  ASSIGNED
+  IN_CONSULTATION
+  COMPLETED
+  CANCELLED
+}
+
+// ── Auth user ─────────────────────────────────────────────────────────────────
 
 model User {
   id         String   @id @default(cuid())
@@ -24,20 +42,142 @@ model User {
 
   doctorProfile  Doctor?
   patientProfile Patient?
+  auditLogs      AuditLog[]
 }
+
+// ── Doctor ────────────────────────────────────────────────────────────────────
 
 model Doctor {
-  id             String  @id @default(cuid())
-  userId         String  @unique
-  user           User    @relation(fields: [userId], references: [id])
-  licenseNumber  String
-  specialization String
-  approved       Boolean @default(false)
+  id              String             @id @default(cuid())
+  userId          String             @unique
+  user            User               @relation(fields: [userId], references: [id])
+  licenseNumber   String
+  specialization  String
+  approved        Boolean            @default(false)
+  availability    DoctorAvailability @default(AVAILABLE)
+  lastAssignedAt  DateTime?
+
+  visits              Visit[]
+  consultationRecords PatientHistory[]
+  doctorConsultations DoctorConsultation[]
+  queueEntries        Queue[]
 }
 
+// ── Patient ───────────────────────────────────────────────────────────────────
+// userId is nullable — walk-in patients have no User account.
+
 model Patient {
-  id          String    @id @default(cuid())
-  userId      String    @unique
-  user        User      @relation(fields: [userId], references: [id])
-  dateOfBirth DateTime?
+  id           String    @id @default(cuid())
+  userId       String?   @unique
+  user         User?     @relation(fields: [userId], references: [id])
+  prn          String    @unique      // PAT-YYYYMMDD-XXXX — never changes
+  name         String
+  dateOfBirth  DateTime?
+  gender       String?
+  phone        String?
+  address      String?
+  city         String?
+  state        String?
+  pincode      String?
+  healthIssues String?
+  paymentType  String?
+  priority     String    @default("NORMAL")
+  createdAt    DateTime  @default(now())
+
+  visits    Visit[]
+  histories PatientHistory[]
+}
+
+// ── Visit  (one per patient per day; new token each visit) ───────────────────
+
+model Visit {
+  id            String      @id @default(cuid())
+  visitId       String      @unique   // VIS-YYYYMMDD-XXXXX
+  token         String                // A001, A002 … resets daily
+  patientId     String
+  doctorId      String?
+  visitDate     DateTime    @default(now())
+  status        VisitStatus @default(WAITING)
+  queuePosition Int?
+  priority      String      @default("NORMAL")
+  createdAt     DateTime    @default(now())
+
+  patient Patient  @relation(fields: [patientId], references: [id])
+  doctor  Doctor?  @relation(fields: [doctorId], references: [id])
+  history PatientHistory?
+  queue   Queue?
+
+  @@index([visitDate])
+  @@index([status])
+  @@index([doctorId, status])
+}
+
+// ── Queue entry (mirrors Visit, tracks position per doctor) ──────────────────
+
+model Queue {
+  id            String      @id @default(cuid())
+  visitId       String      @unique
+  doctorId      String?
+  status        VisitStatus @default(WAITING)
+  queuePosition Int
+  createdAt     DateTime    @default(now())
+
+  visit  Visit   @relation(fields: [visitId], references: [id])
+  doctor Doctor? @relation(fields: [doctorId], references: [id])
+}
+
+// ── Consultation history (immutable after creation) ───────────────────────────
+
+model PatientHistory {
+  id                String    @id @default(cuid())
+  visitId           String    @unique
+  patientId         String
+  doctorId          String
+  prescription      String?
+  healthNotes       String?
+  consultationStart DateTime
+  consultationEnd   DateTime?
+  duration          Int?      // seconds
+  createdAt         DateTime  @default(now())
+
+  visit              Visit               @relation(fields: [visitId], references: [id])
+  patient            Patient             @relation(fields: [patientId], references: [id])
+  doctor             Doctor              @relation(fields: [doctorId], references: [id])
+  doctorConsultation DoctorConsultation?
+}
+
+model DoctorConsultation {
+  id        String   @id @default(cuid())
+  doctorId  String
+  historyId String   @unique
+  visitId   String
+  createdAt DateTime @default(now())
+
+  doctor  Doctor         @relation(fields: [doctorId], references: [id])
+  history PatientHistory @relation(fields: [historyId], references: [id])
+}
+
+// ── Concurrency-safe daily counters ──────────────────────────────────────────
+
+model DailyCounter {
+  type  String  // "PRN" | "TOKEN" | "VISIT"
+  date  String  // YYYYMMDD
+  count Int     @default(0)
+
+  @@id([type, date])
+}
+
+// ── Audit log ─────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  userRole  String?
+  action    String
+  entity    String
+  entityId  String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
 }

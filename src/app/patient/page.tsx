@@ -1,182 +1,226 @@
-import { redirect } from "next/navigation";
-import { getSession } from "@/lib/session";
-import LogoutButton from "@/components/LogoutButton";
+"use client";
 
-export default async function PatientPage() {
-  const session = await getSession();
-  if (!session || session.role !== "PATIENT") redirect("/login");
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
 
-  const stats = [
-    { label: "Upcoming Visits", value: "2", icon: "📅", color: "bg-teal-50 text-teal-600" },
-    { label: "Prescriptions", value: "5", icon: "💊", color: "bg-purple-50 text-purple-600" },
-    { label: "Lab Reports", value: "3", icon: "🔬", color: "bg-blue-50 text-blue-600" },
-    { label: "Health Score", value: "87%", icon: "❤️", color: "bg-rose-50 text-rose-600" },
-  ];
+interface DashboardData {
+  patient:      { prn: string; name: string; gender?: string; phone?: string };
+  todayVisit:   { token: string; visitId: string; status: string; doctor?: { user: { name: string } } } | null;
+  queueAhead:   number;
+  estimatedWait: number;
+}
 
-  const appointments = [
-    { date: "Jul 28, 2025", doctor: "Dr. Sarah Johnson", dept: "Cardiology", status: "Upcoming" },
-    { date: "Aug 5, 2025", doctor: "Dr. Michael Lee", dept: "General", status: "Upcoming" },
-    { date: "Jun 10, 2025", doctor: "Dr. Sarah Johnson", dept: "Cardiology", status: "Completed" },
-  ];
+interface HistoryItem {
+  id: string;
+  prescription?: string;
+  healthNotes?: string;
+  consultationStart: string;
+  consultationEnd?: string;
+  duration?: number;
+  doctor: { user: { name: string } };
+  visit:  { token: string; visitId: string; visitDate: string };
+}
 
-  const prescriptions = [
-    { name: "Aspirin 75mg", frequency: "Once daily", duration: "30 days" },
-    { name: "Lisinopril 10mg", frequency: "Once daily", duration: "60 days" },
-    { name: "Metformin 500mg", frequency: "Twice daily", duration: "90 days" },
-  ];
+const STATUS_LABEL: Record<string, string> = {
+  WAITING: "Waiting", ASSIGNED: "Assigned to Doctor",
+  IN_CONSULTATION: "In Consultation", COMPLETED: "Completed", CANCELLED: "Cancelled",
+};
+const STATUS_COLOR: Record<string, string> = {
+  WAITING: "#D97706", ASSIGNED: "#2563EB", IN_CONSULTATION: "#059669",
+  COMPLETED: "#6B7280", CANCELLED: "#DC2626",
+};
+
+export default function PatientDashboard() {
+  const router = useRouter();
+  const [data, setData]       = useState<DashboardData | null>(null);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab]         = useState<"today" | "history">("today");
+
+  const logout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+  };
+
+  useEffect(() => {
+    Promise.all([
+      fetch("/api/patient/dashboard").then(r => { if (r.status === 403) { router.push("/login"); } return r.json(); }),
+      fetch("/api/patient/history").then(r => r.json()),
+    ]).then(([d, h]) => {
+      setData(d);
+      setHistory(h.histories ?? []);
+    }).catch(() => toast.error("Failed to load dashboard")).finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div style={S.loading}>Loading…</div>;
+  if (!data?.patient) return <div style={S.loading}>Patient profile not found.</div>;
+
+  const { patient, todayVisit, queueAhead, estimatedWait } = data;
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      {/* Sidebar */}
-      <aside className="fixed inset-y-0 left-0 w-64 bg-white shadow-sm">
-        <div className="flex h-16 items-center gap-3 border-b px-6">
-          <span className="text-xl font-bold text-gray-800">MeFy</span>
-          <span className="rounded-md bg-teal-100 px-2 py-0.5 text-xs font-semibold text-teal-700">
-            Patient
-          </span>
+    <div style={S.page}>
+      {/* Header */}
+      <header style={S.header}>
+        <div style={S.headerInner}>
+          <div style={S.brand}>
+            <img src="/waferlogo.png" alt="Wafer" style={S.logo} />
+            <span style={S.brandName}>Patient Portal</span>
+          </div>
+          <div style={S.headerRight}>
+            <span style={S.prnBadge}>{patient.prn}</span>
+            <button style={S.logoutBtn} onClick={logout}>Sign Out</button>
+          </div>
         </div>
-        <nav className="mt-6 px-4 space-y-1">
-          {[
-            { icon: "🏠", label: "Dashboard", active: true },
-            { icon: "📅", label: "My Appointments" },
-            { icon: "💊", label: "Prescriptions" },
-            { icon: "🔬", label: "Lab Reports" },
-            { icon: "📋", label: "Medical History" },
-            { icon: "👨‍⚕️", label: "Find a Doctor" },
-            { icon: "⚙️", label: "Settings" },
-          ].map(({ icon, label, active }) => (
-            <button
-              key={label}
-              className={`flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition ${
-                active
-                  ? "bg-teal-50 text-teal-700"
-                  : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-              }`}
-            >
-              <span>{icon}</span>
-              {label}
-            </button>
-          ))}
-        </nav>
-      </aside>
+      </header>
 
-      {/* Main */}
-      <main className="ml-64 flex-1">
-        {/* Header */}
-        <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-white px-8 shadow-sm">
+      <main style={S.main}>
+        {/* Welcome */}
+        <div style={S.welcome}>
+          <h1 style={S.welcomeH}>Welcome, {patient.name}</h1>
+          <p style={S.welcomeSub}>Your permanent reference number: <strong>{patient.prn}</strong></p>
+        </div>
+
+        {/* Tabs */}
+        <div style={S.tabs}>
+          <button style={{ ...S.tab, ...(tab === "today" ? S.tabActive : {}) }} onClick={() => setTab("today")}>Today's Visit</button>
+          <button style={{ ...S.tab, ...(tab === "history" ? S.tabActive : {}) }} onClick={() => setTab("history")}>Consultation History</button>
+        </div>
+
+        {/* Today tab */}
+        {tab === "today" && (
           <div>
-            <h1 className="text-lg font-semibold text-gray-800">
-              Hello, {session.name} 👋
-            </h1>
-            <p className="text-xs text-gray-500">Your health dashboard</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-teal-100 text-sm font-bold text-teal-700">
-              {session.name.charAt(0)}
-            </div>
-            <LogoutButton />
-          </div>
-        </header>
-
-        <div className="p-8">
-          {/* Stats */}
-          <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
-            {stats.map(({ label, value, icon, color }) => (
-              <div key={label} className="rounded-2xl bg-white p-5 shadow-sm">
-                <div className={`mb-3 inline-flex rounded-xl p-2.5 text-xl ${color}`}>
-                  {icon}
+            {todayVisit ? (
+              <div style={S.visitCard}>
+                <div style={S.visitHeader}>
+                  <div>
+                    <div style={S.tokenBig}>{todayVisit.token}</div>
+                    <div style={S.tokenSub}>Your Queue Token</div>
+                  </div>
+                  <span style={{ ...S.statusPill, background: STATUS_COLOR[todayVisit.status] + "22", color: STATUS_COLOR[todayVisit.status] }}>
+                    {STATUS_LABEL[todayVisit.status] ?? todayVisit.status}
+                  </span>
                 </div>
-                <p className="text-2xl font-bold text-gray-800">{value}</p>
-                <p className="mt-1 text-sm text-gray-500">{label}</p>
-              </div>
-            ))}
-          </div>
 
-          <div className="grid gap-6 lg:grid-cols-3">
-            {/* Appointments */}
-            <div className="col-span-2 rounded-2xl bg-white p-6 shadow-sm">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="font-semibold text-gray-800">My Appointments</h2>
-                <button className="rounded-lg bg-teal-50 px-3 py-1.5 text-xs font-medium text-teal-700 hover:bg-teal-100">
-                  + Book New
-                </button>
-              </div>
-              <div className="space-y-3">
-                {appointments.map(({ date, doctor, dept, status }) => (
-                  <div
-                    key={date + doctor}
-                    className="flex items-center justify-between rounded-xl border border-gray-100 px-4 py-3"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-teal-100 text-lg">
-                        🩺
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-800">
-                          {doctor}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {date} · {dept}
-                        </p>
-                      </div>
+                <div style={S.infoGrid}>
+                  <div style={S.infoItem}>
+                    <span style={S.infoLabel}>Visit ID</span>
+                    <span style={S.infoVal}>{todayVisit.visitId}</span>
+                  </div>
+                  {todayVisit.doctor && (
+                    <div style={S.infoItem}>
+                      <span style={S.infoLabel}>Assigned Doctor</span>
+                      <span style={S.infoVal}>{todayVisit.doctor.user.name}</span>
                     </div>
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs font-medium ${
-                        status === "Upcoming"
-                          ? "bg-teal-100 text-teal-700"
-                          : "bg-gray-100 text-gray-600"
-                      }`}
-                    >
-                      {status}
-                    </span>
+                  )}
+                  {todayVisit.status !== "COMPLETED" && todayVisit.status !== "CANCELLED" && (
+                    <>
+                      <div style={S.infoItem}>
+                        <span style={S.infoLabel}>Patients Ahead</span>
+                        <span style={S.infoVal}>{queueAhead}</span>
+                      </div>
+                      <div style={S.infoItem}>
+                        <span style={S.infoLabel}>Estimated Wait</span>
+                        <span style={S.infoVal}>{estimatedWait} min</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div style={S.emptyCard}>
+                <div style={S.emptyIcon}>📋</div>
+                <div style={S.emptyText}>No visit registered for today.</div>
+                <div style={S.emptySubText}>Visit the reception desk to get a queue token.</div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* History tab */}
+        {tab === "history" && (
+          <div>
+            {history.length === 0 ? (
+              <div style={S.emptyCard}>
+                <div style={S.emptyIcon}>📂</div>
+                <div style={S.emptyText}>No consultation history yet.</div>
+              </div>
+            ) : (
+              <div style={S.historyList}>
+                {history.map(h => (
+                  <div key={h.id} style={S.historyCard}>
+                    <div style={S.historyHeader}>
+                      <div>
+                        <span style={S.historyToken}>{h.visit.token}</span>
+                        <span style={S.historyDate}>{new Date(h.visit.visitDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span>
+                      </div>
+                      <span style={S.historyDoctor}>{h.doctor.user.name}</span>
+                    </div>
+                    {h.healthNotes && (
+                      <div style={S.historySection}>
+                        <div style={S.sectionLabel}>Health Notes</div>
+                        <div style={S.sectionText}>{h.healthNotes}</div>
+                      </div>
+                    )}
+                    {h.prescription && (
+                      <div style={S.historySection}>
+                        <div style={S.sectionLabel}>Prescription</div>
+                        <div style={S.sectionText}>{h.prescription}</div>
+                      </div>
+                    )}
+                    {h.duration && (
+                      <div style={S.historyFooter}>Duration: {Math.round(h.duration / 60)} min</div>
+                    )}
                   </div>
                 ))}
               </div>
-            </div>
-
-            {/* Current prescriptions */}
-            <div className="rounded-2xl bg-white p-6 shadow-sm">
-              <h2 className="mb-4 font-semibold text-gray-800">
-                Active Prescriptions
-              </h2>
-              <div className="space-y-3">
-                {prescriptions.map(({ name, frequency, duration }) => (
-                  <div
-                    key={name}
-                    className="rounded-xl border border-gray-100 p-3"
-                  >
-                    <div className="flex items-start gap-2">
-                      <span className="mt-0.5 text-lg">💊</span>
-                      <div>
-                        <p className="text-sm font-medium text-gray-800">
-                          {name}
-                        </p>
-                        <p className="text-xs text-gray-500">{frequency}</p>
-                        <p className="text-xs text-teal-600">{duration}</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Health score */}
-              <div className="mt-6 rounded-xl bg-gradient-to-r from-teal-50 to-cyan-50 p-4">
-                <p className="text-xs font-medium text-gray-600">
-                  Overall Health Score
-                </p>
-                <p className="mt-1 text-3xl font-bold text-teal-700">87%</p>
-                <div className="mt-2 h-2 w-full rounded-full bg-teal-100">
-                  <div
-                    className="h-2 rounded-full bg-teal-500"
-                    style={{ width: "87%" }}
-                  />
-                </div>
-                <p className="mt-1 text-xs text-gray-500">Good — Keep it up!</p>
-              </div>
-            </div>
+            )}
           </div>
-        </div>
+        )}
       </main>
     </div>
   );
 }
+
+const S: Record<string, React.CSSProperties> = {
+  loading:      { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "system-ui,sans-serif", color: "#888" },
+  page:         { minHeight: "100vh", background: "#F5F4F2", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif" },
+  header:       { background: "#0C1929", padding: "0 24px", height: 60 },
+  headerInner:  { maxWidth: 900, margin: "0 auto", height: "100%", display: "flex", alignItems: "center", justifyContent: "space-between" },
+  brand:        { display: "flex", alignItems: "center", gap: 10 },
+  logo:         { height: 28, filter: "brightness(0) invert(1)" },
+  brandName:    { fontSize: 15, fontWeight: 700, color: "#fff" },
+  headerRight:  { display: "flex", alignItems: "center", gap: 12 },
+  prnBadge:     { fontSize: 12, fontWeight: 700, background: "rgba(255,255,255,.12)", color: "#fff", padding: "4px 12px", borderRadius: 20, letterSpacing: ".05em" },
+  logoutBtn:    { fontSize: 13, color: "rgba(255,255,255,.7)", background: "transparent", border: "1px solid rgba(255,255,255,.25)", borderRadius: 8, padding: "5px 14px", cursor: "pointer" },
+  main:         { maxWidth: 900, margin: "0 auto", padding: "32px 24px" },
+  welcome:      { marginBottom: 28 },
+  welcomeH:     { fontSize: 26, fontWeight: 700, color: "#0C1929", marginBottom: 4 },
+  welcomeSub:   { fontSize: 14, color: "#666" },
+  tabs:         { display: "flex", gap: 4, marginBottom: 24, background: "#E8E6E3", borderRadius: 12, padding: 4 },
+  tab:          { flex: 1, padding: "9px 16px", background: "transparent", border: "none", borderRadius: 9, fontSize: 13.5, fontWeight: 600, color: "#666", cursor: "pointer" },
+  tabActive:    { background: "#fff", color: "#0C1929", boxShadow: "0 1px 4px rgba(0,0,0,.1)" },
+  visitCard:    { background: "#fff", borderRadius: 14, padding: "28px 32px", boxShadow: "0 1px 8px rgba(0,0,0,.06)" },
+  visitHeader:  { display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24 },
+  tokenBig:     { fontSize: 56, fontWeight: 800, color: "#0C1929", lineHeight: 1 },
+  tokenSub:     { fontSize: 12, color: "#999", marginTop: 4, letterSpacing: ".05em", textTransform: "uppercase" },
+  statusPill:   { fontSize: 12.5, fontWeight: 700, padding: "5px 14px", borderRadius: 20, letterSpacing: ".03em" },
+  infoGrid:     { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 },
+  infoItem:     { background: "#F8F7F5", borderRadius: 10, padding: "14px 16px" },
+  infoLabel:    { display: "block", fontSize: 11, fontWeight: 700, color: "#999", letterSpacing: ".07em", textTransform: "uppercase", marginBottom: 4 },
+  infoVal:      { fontSize: 16, fontWeight: 700, color: "#0C1929" },
+  emptyCard:    { background: "#fff", borderRadius: 14, padding: "56px 32px", textAlign: "center", boxShadow: "0 1px 8px rgba(0,0,0,.06)" },
+  emptyIcon:    { fontSize: 36, marginBottom: 12 },
+  emptyText:    { fontSize: 16, fontWeight: 600, color: "#444", marginBottom: 6 },
+  emptySubText: { fontSize: 13.5, color: "#999" },
+  historyList:  { display: "flex", flexDirection: "column", gap: 14 },
+  historyCard:  { background: "#fff", borderRadius: 12, padding: "20px 24px", boxShadow: "0 1px 6px rgba(0,0,0,.05)" },
+  historyHeader:{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  historyToken: { fontSize: 18, fontWeight: 800, color: "#0C1929", marginRight: 10 },
+  historyDate:  { fontSize: 13, color: "#888" },
+  historyDoctor:{ fontSize: 13, fontWeight: 600, color: "#2563EB" },
+  historySection:{ marginBottom: 10 },
+  sectionLabel: { fontSize: 11, fontWeight: 700, color: "#999", letterSpacing: ".07em", textTransform: "uppercase", marginBottom: 4 },
+  sectionText:  { fontSize: 13.5, color: "#333", lineHeight: 1.5 },
+  historyFooter:{ fontSize: 12, color: "#aaa", marginTop: 8 },
+};

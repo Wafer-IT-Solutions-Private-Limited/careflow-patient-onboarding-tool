@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { signToken } from "@/lib/auth";
 import { patientRegisterSchema, detectRoleFromEmail } from "@/lib/validators/auth";
+import { generatePRN } from "@/lib/counters";
 
 export async function POST(req: NextRequest) {
   try {
@@ -43,7 +44,7 @@ export async function POST(req: NextRequest) {
         password:   hash,
         role:       "PATIENT",
         isVerified: true,
-        patientProfile: { create: {} },
+        patientProfile: { create: { prn: await generatePRN(), name } },
       },
     });
 
