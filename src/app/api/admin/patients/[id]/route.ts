@@ -129,8 +129,19 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   if (!target || target.role !== "PATIENT")
     return NextResponse.json({ error: "Patient not found" }, { status: 404 });
 
-  // Delete profile first (FK constraint), then user
+  // Cascade-delete in FK order to satisfy RESTRICT constraints
+  const patients = await prisma.patient.findMany({ where: { userId: id }, select: { id: true } });
+  const patientIds = patients.map(p => p.id);
+  const histories = await prisma.patientHistory.findMany({ where: { patientId: { in: patientIds } }, select: { id: true } });
+  const historyIds = histories.map(h => h.id);
+  const visits = await prisma.visit.findMany({ where: { patientId: { in: patientIds } }, select: { id: true } });
+  const visitIds = visits.map(v => v.id);
+
   await prisma.$transaction([
+    prisma.doctorConsultation.deleteMany({ where: { historyId: { in: historyIds } } }),
+    prisma.patientHistory.deleteMany({ where: { patientId: { in: patientIds } } }),
+    prisma.queue.deleteMany({ where: { visitId: { in: visitIds } } }),
+    prisma.visit.deleteMany({ where: { patientId: { in: patientIds } } }),
     prisma.patient.deleteMany({ where: { userId: id } }),
     prisma.user.delete({ where: { id } }),
   ]);

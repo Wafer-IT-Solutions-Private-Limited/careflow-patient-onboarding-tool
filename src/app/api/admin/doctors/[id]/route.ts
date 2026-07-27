@@ -76,6 +76,15 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const { id } = await params;
   const doctor = await prisma.doctor.findUnique({ where: { id } });
   if (!doctor) return NextResponse.json({ error: "Doctor not found" }, { status: 404 });
-  await prisma.user.delete({ where: { id: doctor.userId } });
+
+  // Cascade-delete in FK order to satisfy RESTRICT constraints
+  await prisma.$transaction([
+    prisma.doctorConsultation.deleteMany({ where: { doctorId: id } }),
+    prisma.patientHistory.deleteMany({ where: { doctorId: id } }),
+    prisma.queue.deleteMany({ where: { doctorId: id } }),
+    prisma.visit.deleteMany({ where: { doctorId: id } }),
+    prisma.doctor.delete({ where: { id } }),
+    prisma.user.delete({ where: { id: doctor.userId } }),
+  ]);
   return NextResponse.json({ message: "Doctor deleted" });
 }
