@@ -107,6 +107,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!password || password.length < 6)
     return NextResponse.json({ error: "Password must be at least 6 characters" }, { status: 400 });
 
+  // Scope to PATIENT role only — prevents resetting doctor/admin passwords
+  const target = await prisma.user.findUnique({ where: { id } });
+  if (!target || target.role !== "PATIENT")
+    return NextResponse.json({ error: "Patient not found" }, { status: 404 });
+
   const hash = await bcrypt.hash(password, 12);
   await prisma.user.update({ where: { id }, data: { password: hash } });
   return NextResponse.json({ success: true });
@@ -118,6 +123,11 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
+
+  // Scope to PATIENT role only — prevents deleting doctor/admin accounts
+  const target = await prisma.user.findUnique({ where: { id } });
+  if (!target || target.role !== "PATIENT")
+    return NextResponse.json({ error: "Patient not found" }, { status: 404 });
 
   // Delete profile first (FK constraint), then user
   await prisma.$transaction([

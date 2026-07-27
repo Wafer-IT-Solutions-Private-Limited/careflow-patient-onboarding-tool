@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyToken } from "@/lib/auth";
 
-// GET /api/queue — today's full queue (admin/doctor)
+// GET /api/queue â€” today's full queue (admin/doctor)
 export async function GET(req: NextRequest) {
   try {
     const cookie = req.cookies.get("token");
@@ -26,7 +26,8 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ visits });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg = process.env.NODE_ENV === "production" ? "Internal server error" : (e instanceof Error ? e.message : String(e));
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
+

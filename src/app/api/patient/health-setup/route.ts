@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyToken } from "@/lib/auth";
 import { createHash } from "crypto";
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
     };
     if (healthParts.length) updateData.healthIssues = healthParts.join(" | ");
 
-    // Handle Aadhaar — validate 12 digits, check uniqueness via hash
+    // Handle Aadhaar â€” validate 12 digits, check uniqueness via hash
     if (aadhaar) {
       const digits = aadhaar.replace(/\s/g, "");
       if (!/^\d{12}$/.test(digits)) {
@@ -49,7 +49,8 @@ export async function POST(req: NextRequest) {
     await prisma.patient.update({ where: { id: patient.id }, data: updateData });
     return NextResponse.json({ success: true });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg = process.env.NODE_ENV === "production" ? "Internal server error" : (e instanceof Error ? e.message : String(e));
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
+

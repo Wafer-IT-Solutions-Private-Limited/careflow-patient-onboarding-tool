@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { generatePRN } from "@/lib/counters";
 import { logAudit } from "@/lib/audit";
@@ -10,7 +10,7 @@ function hashAadhaar(raw: string): string {
   return createHash("sha256").update(raw.replace(/\s/g, "")).digest("hex");
 }
 
-// POST /api/patients — create walk-in patient (no User account; reception/admin only)
+// POST /api/patients â€” create walk-in patient (no User account; reception/admin only)
 export async function POST(req: NextRequest) {
   try {
     const cookie = req.cookies.get("token");
@@ -50,7 +50,8 @@ export async function POST(req: NextRequest) {
     emitSSE({ type: "patient:registered", room: "admin", prn });
     return NextResponse.json({ patient }, { status: 201 });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg = process.env.NODE_ENV === "production" ? "Internal server error" : (e instanceof Error ? e.message : String(e));
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
+

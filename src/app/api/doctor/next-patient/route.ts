@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyToken } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { emitSSE } from "@/lib/sse";
 
-// POST /api/doctor/next-patient — complete current consultation and pull next patient
+// POST /api/doctor/next-patient â€” complete current consultation and pull next patient
 export async function POST(req: NextRequest) {
   try {
     const cookie = req.cookies.get("token");
@@ -53,12 +53,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: "Next patient started", visit: next });
     }
 
-    // Queue empty — set doctor back to AVAILABLE
+    // Queue empty â€” set doctor back to AVAILABLE
     await prisma.doctor.update({ where: { id: doctor.id }, data: { availability: "AVAILABLE" } });
     emitSSE({ type: "doctor:status", room: "admin", doctorId: doctor.id, availability: "AVAILABLE" });
     return NextResponse.json({ message: "No more patients in queue", visit: null });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg = process.env.NODE_ENV === "production" ? "Internal server error" : (e instanceof Error ? e.message : String(e));
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
+

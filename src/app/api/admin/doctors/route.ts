@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyToken } from "@/lib/auth";
 import bcrypt from "bcryptjs";
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
     });
     return NextResponse.json({ doctors });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg = process.env.NODE_ENV === "production" ? "Internal server error" : (e instanceof Error ? e.message : String(e));
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
@@ -51,7 +51,8 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json({ user }, { status: 201 });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg = process.env.NODE_ENV === "production" ? "Internal server error" : (e instanceof Error ? e.message : String(e));
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
+

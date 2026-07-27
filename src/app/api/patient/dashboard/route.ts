@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyToken } from "@/lib/auth";
 import { estimatedWaitMinutes, assignDoctor, getQueuePosition } from "@/lib/queue";
@@ -6,7 +6,7 @@ import { todayISTStart } from "@/lib/timezone";
 import { emitSSE } from "@/lib/sse";
 import { logAudit } from "@/lib/audit";
 
-// GET /api/patient/dashboard — also activates today's SCHEDULED appointment if present
+// GET /api/patient/dashboard â€” also activates today's SCHEDULED appointment if present
 export async function GET(req: NextRequest) {
   try {
     const cookie = req.cookies.get("token");
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
 
     const todayStart = todayISTStart();
 
-    // Activate today's SCHEDULED appointment → WAITING
+    // Activate today's SCHEDULED appointment â†’ WAITING
     const scheduledToday = await prisma.visit.findFirst({
       where: {
         patientId:       patient.id,
@@ -91,7 +91,8 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ patient, todayVisit, queueAhead, estimatedWait, upcomingAppointments });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg = process.env.NODE_ENV === "production" ? "Internal server error" : (e instanceof Error ? e.message : String(e));
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
+

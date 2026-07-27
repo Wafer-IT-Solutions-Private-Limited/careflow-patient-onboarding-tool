@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyToken } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { emitSSE } from "@/lib/sse";
 
-// POST /api/doctor/consultation — save prescription + health notes
+// POST /api/doctor/consultation â€” save prescription + health notes
 export async function POST(req: NextRequest) {
   try {
     const cookie = req.cookies.get("token");
@@ -45,7 +45,8 @@ export async function POST(req: NextRequest) {
     emitSSE({ type: "queue:updated", room: "admin" });
     return NextResponse.json({ history: updated });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg = process.env.NODE_ENV === "production" ? "Internal server error" : (e instanceof Error ? e.message : String(e));
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
+

@@ -21,7 +21,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!visit) return NextResponse.json({ error: "Visit not found" }, { status: 404 });
     return NextResponse.json({ visit });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg = process.env.NODE_ENV === "production" ? "Internal server error" : (e instanceof Error ? e.message : String(e));
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
@@ -36,13 +36,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     const { id } = await params;
     const body = await req.json();
+    // Whitelist only safe, updatable fields — prevents mass assignment
+    const { status, priority, cancelReason } = body;
     const visit = await prisma.visit.update({
       where: { id },
-      data:  body,
+      data:  {
+        ...(status       !== undefined && { status }),
+        ...(priority     !== undefined && { priority }),
+        ...(cancelReason !== undefined && { cancelReason }),
+      },
     });
     return NextResponse.json({ visit });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg = process.env.NODE_ENV === "production" ? "Internal server error" : (e instanceof Error ? e.message : String(e));
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

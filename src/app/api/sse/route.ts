@@ -20,11 +20,15 @@ export async function GET(req: NextRequest) {
   if (role === "ADMIN") {
     rooms.push("admin");
   } else if (role === "DOCTOR") {
-    const doctorId = searchParams.get("doctorId");
-    if (doctorId) rooms.push(`doctor:${doctorId}`);
+    // Derive room from DB — never trust client-supplied doctorId
+    const { prisma } = await import("@/lib/prisma");
+    const doctor = await prisma.doctor.findUnique({ where: { userId: jwt.id } });
+    if (doctor) rooms.push(`doctor:${doctor.id}`);
   } else if (role === "PATIENT") {
-    const patientId = searchParams.get("patientId");
-    if (patientId) rooms.push(`patient:${patientId}`);
+    // Derive room from DB — never trust client-supplied patientId
+    const { prisma } = await import("@/lib/prisma");
+    const patient = await prisma.patient.findFirst({ where: { userId: jwt.id } });
+    if (patient) rooms.push(`patient:${patient.id}`);
   }
 
   if (rooms.length === 0) return new Response("No room", { status: 400 });

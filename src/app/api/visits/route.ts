@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { generateToken, generateVisitId } from "@/lib/counters";
 import { assignDoctor, getQueuePosition } from "@/lib/queue";
@@ -6,12 +6,14 @@ import { logAudit } from "@/lib/audit";
 import { verifyToken } from "@/lib/auth";
 import { todayISTStart } from "@/lib/timezone";
 
-// POST /api/visits — create a new visit (walk-in or revisit)
+// POST /api/visits â€” create a new visit (walk-in or revisit); ADMIN and DOCTOR only
 export async function POST(req: NextRequest) {
   try {
     const cookie = req.cookies.get("token");
     if (!cookie) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const jwt = await verifyToken(cookie.value);
+    if (!["ADMIN", "DOCTOR"].includes(jwt.role))
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const { patientId, priority } = await req.json();
     if (!patientId) return NextResponse.json({ error: "patientId is required" }, { status: 400 });
@@ -65,7 +67,8 @@ export async function POST(req: NextRequest) {
     await logAudit({ userId: jwt.id, userRole: jwt.role, action: "CREATE", entity: "Visit", entityId: visit.id, metadata: { visitId, token, doctorId } });
     return NextResponse.json({ visit }, { status: 201 });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg = process.env.NODE_ENV === "production" ? "Internal server error" : (e instanceof Error ? e.message : String(e));
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
+
