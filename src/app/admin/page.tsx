@@ -18,6 +18,12 @@ interface QueueVisit {
   queue?: { queuePosition: number };
 }
 
+interface FutureAppointment {
+  id: string; token: string; visitId: string; appointmentDate: string; healthIssue?: string; status: string;
+  patient: { prn: string; name: string; priority: string; phone?: string };
+  doctor?: { user: { name: string } };
+}
+
 const STATUS_COLOR: Record<string, string> = {
   WAITING: "#D97706", ASSIGNED: "#2563EB", IN_CONSULTATION: "#059669",
   COMPLETED: "#6B7280", CANCELLED: "#DC2626",
@@ -27,18 +33,21 @@ export default function AdminDashboard() {
   const router = useRouter();
   const [stats, setStats]   = useState<Stats | null>(null);
   const [queue, setQueue]   = useState<QueueVisit[]>([]);
+  const [appointments, setAppointments] = useState<FutureAppointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [cancelModal, setCancelModal] = useState<QueueVisit | null>(null);
   const [cancelReason, setCancelReason] = useState("");
 
   const load = async () => {
-    const [s, q] = await Promise.all([
+    const [s, q, a] = await Promise.all([
       fetch("/api/admin/stats").then(r => { if (r.status === 403) router.push("/login"); return r.json(); }),
       fetch("/api/queue").then(r => r.json()),
+      fetch("/api/admin/appointments").then(r => r.json()),
     ]);
     setStats(s);
     setQueue(q.visits ?? []);
+    setAppointments(a.appointments ?? []);
   };
 
   useEffect(() => {
@@ -48,7 +57,7 @@ export default function AdminDashboard() {
     es.onmessage = (e) => {
       try {
         const event = JSON.parse(e.data);
-        if (["queue:updated","visit:cancelled","doctor:status","patient:called","patient:registered"].includes(event.type)) load();
+        if (["queue:updated","visit:cancelled","doctor:status","patient:called","patient:registered","appointment:booked"].includes(event.type)) load();
       } catch { /* ignore */ }
     };
     return () => es.close();
@@ -68,7 +77,7 @@ export default function AdminDashboard() {
     } finally { setCancelling(null); }
   };
 
-  const activeQueue = queue.filter(v => !["COMPLETED","CANCELLED"].includes(v.status));
+  const activeQueue = queue.filter(v => !["COMPLETED","CANCELLED","SCHEDULED"].includes(v.status));
 
   return (
     <div style={S.page}>
@@ -107,7 +116,7 @@ export default function AdminDashboard() {
 
             <div style={S.section}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-                <div style={S.sectionTitle}>Live Queue ({activeQueue.length} active)</div>
+                <div style={S.sectionTitle}>Today&apos;s Live Queue ({activeQueue.length} active)</div>
               </div>
               {activeQueue.length === 0 ? (
                 <div style={S.emptyQueue}>No active visits right now.</div>
@@ -143,6 +152,41 @@ export default function AdminDashboard() {
                               Cancel
                             </button>
                           </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div style={{ ...S.section, marginTop: 20 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+                <div style={S.sectionTitle}>Future Appointments ({appointments.length})</div>
+              </div>
+              {appointments.length === 0 ? (
+                <div style={S.emptyQueue}>No upcoming appointments scheduled.</div>
+              ) : (
+                <div style={S.tableWrap}>
+                  <table style={S.table}>
+                    <thead>
+                      <tr>
+                        {["Token", "Patient", "PRN", "Appointment Date", "Reason", "Doctor"].map(h => (
+                          <th key={h} style={S.th}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {appointments.map(a => (
+                        <tr key={a.id} style={S.tr}>
+                          <td style={{ ...S.td, fontWeight: 800, fontSize: 16 }}>{a.token}</td>
+                          <td style={S.td}>{a.patient.name}</td>
+                          <td style={{ ...S.td, color: "#888", fontSize: 12 }}>{a.patient.prn}</td>
+                          <td style={{ ...S.td, fontWeight: 700, color: "#2563EB" }}>
+                            {new Date(a.appointmentDate).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
+                          </td>
+                          <td style={{ ...S.td, color: "#555", fontSize: 13 }}>{a.healthIssue ?? <span style={{ color: "#ccc" }}>—</span>}</td>
+                          <td style={S.td}>{a.doctor?.user.name ?? <span style={{ color: "#aaa" }}>Unassigned</span>}</td>
                         </tr>
                       ))}
                     </tbody>

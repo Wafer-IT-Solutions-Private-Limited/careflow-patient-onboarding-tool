@@ -9,14 +9,22 @@ type ListeningField = "healthNotes" | "prescription" | null;
 
 interface DoctorInfo { id: string; availability: Availability; specialization: string; user: { name: string; email: string } }
 interface PatientInfo { prn: string; name: string; gender?: string; priority: string; healthIssues?: string }
-interface VisitSummary { id: string; token: string; visitId: string; status: string; patient: PatientInfo }
+interface VisitSummary { id: string; token: string; visitId: string; status: string; healthIssue?: string; patient: PatientInfo }
 interface HistoryRecord { id: string; prescription?: string; healthNotes?: string }
 
 interface DashboardData {
   doctor:         DoctorInfo;
-  currentVisit:   (VisitSummary & { patient: PatientInfo & { id?: string }; history?: HistoryRecord }) | null;
+  currentVisit:   (VisitSummary & { healthIssue?: string; patient: PatientInfo & { id?: string }; history?: HistoryRecord }) | null;
   queuedVisits:   VisitSummary[];
   todayCompleted: number;
+}
+
+function parseHealthProfile(raw?: string): { label: string; value: string }[] {
+  if (!raw) return [];
+  return raw.split(" | ").map(part => {
+    const idx = part.indexOf(": ");
+    return idx > -1 ? { label: part.slice(0, idx), value: part.slice(idx + 2) } : { label: part, value: "" };
+  }).filter(p => p.value && !p.label.startsWith("Emergency Contact"));
 }
 
 interface PatientHistoryItem {
@@ -295,12 +303,28 @@ export default function DoctorDashboard() {
                     View History
                   </button>
                 </div>
-                {currentVisit.patient.healthIssues && (
+                {currentVisit.healthIssue && (
                   <div style={S.complaint}>
                     <div style={S.complaintLabel}>Chief Complaint</div>
-                    <div style={S.complaintText}>{currentVisit.patient.healthIssues}</div>
+                    <div style={S.complaintText}>{currentVisit.healthIssue}</div>
                   </div>
                 )}
+                {(() => {
+                  const profile = parseHealthProfile(currentVisit.patient.healthIssues);
+                  return profile.length > 0 ? (
+                    <div style={S.healthProfile}>
+                      <div style={S.complaintLabel}>Health Profile</div>
+                      <div style={S.healthGrid}>
+                        {profile.map(p => (
+                          <div key={p.label} style={S.healthItem}>
+                            <span style={S.healthItemLabel}>{p.label}</span>
+                            <span style={S.healthItemVal}>{p.value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null;
+                })()}
 
                 {/* Health Notes Field */}
                 <div style={S.field}>
@@ -516,9 +540,14 @@ const S: Record<string, React.CSSProperties> = {
   priorityBadge:    { fontSize: 11, fontWeight: 700, padding: "2px 10px", borderRadius: 12, letterSpacing: ".05em" },
   historyBtn:       { padding: "7px 14px", background: "#EFF6FF", color: "#2563EB", border: "1.5px solid #BFDBFE", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" as const },
   historyBtnSm:     { padding: "4px 10px", background: "#EFF6FF", color: "#2563EB", border: "1.5px solid #BFDBFE", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer" },
-  complaint:        { background: "#F8F7F5", borderRadius: 10, padding: "12px 16px", marginBottom: 16 },
-  complaintLabel:   { fontSize: 11, fontWeight: 700, color: "#999", textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 4 },
+  complaint:        { background: "#F8F7F5", borderRadius: 10, padding: "12px 16px", marginBottom: 12 },
+  complaintLabel:   { fontSize: 11, fontWeight: 700, color: "#999", textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 6 },
   complaintText:    { fontSize: 13.5, color: "#333" },
+  healthProfile:    { background: "#EFF6FF", border: "1.5px solid #BFDBFE", borderRadius: 10, padding: "12px 16px", marginBottom: 16 },
+  healthGrid:       { display: "flex", flexWrap: "wrap" as const, gap: 8 },
+  healthItem:       { background: "#fff", borderRadius: 8, padding: "6px 12px", border: "1px solid #DBEAFE", display: "flex", flexDirection: "column" as const, gap: 2 },
+  healthItemLabel:  { fontSize: 10, fontWeight: 700, color: "#2563EB", textTransform: "uppercase" as const, letterSpacing: ".06em" },
+  healthItemVal:    { fontSize: 13, fontWeight: 700, color: "#1E3A5F" },
   field:            { marginBottom: 14 },
   labelRow:         { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 },
   label:            { fontSize: 11, fontWeight: 700, color: "#666", textTransform: "uppercase", letterSpacing: ".07em" },

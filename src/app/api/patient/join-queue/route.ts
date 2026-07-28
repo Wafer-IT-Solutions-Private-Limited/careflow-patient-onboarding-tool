@@ -30,6 +30,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "You already have an active visit today", visit: existing }, { status: 409 });
     }
 
+    const body = await req.json().catch(() => ({}));
+    const healthIssue = typeof body.healthIssue === "string" ? body.healthIssue.trim() || undefined : undefined;
+
     const doctorId = await assignDoctor();
     const visitId  = await generateVisitId();
     const token    = await generateToken();
@@ -42,6 +45,7 @@ export async function POST(req: NextRequest) {
         status:        doctorId ? "ASSIGNED" : "WAITING",
         queuePosition: queuePos,
         priority:      patient.priority ?? "NORMAL",
+        healthIssue,
         queue: {
           create: {
             doctorId:      doctorId ?? undefined,

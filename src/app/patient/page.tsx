@@ -38,6 +38,8 @@ export default function PatientDashboard() {
   const [history, setHistory]     = useState<HistoryItem[]>([]);
   const [loading, setLoading]     = useState(true);
   const [joining, setJoining]     = useState(false);
+  const [cancelling, setCancelling] = useState<string | null>(null);
+  const [cancelConfirm, setCancelConfirm] = useState<string | null>(null);
   const [tab, setTab]             = useState<"today" | "appointments" | "history">("today");
   const [healthIssue, setHealthIssue] = useState("");
 
@@ -47,7 +49,8 @@ export default function PatientDashboard() {
   const [apptIssue,    setApptIssue]    = useState("");
   const [booking,      setBooking]      = useState(false);
 
-  const patientIdRef = useRef<string | null>(null);
+  const patientIdRef    = useRef<string | null>(null);
+  const selfCancelRef   = useRef(false);
 
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -75,7 +78,7 @@ export default function PatientDashboard() {
           if (event.type === "queue:updated" || event.type === "patient:called" || event.type === "visit:cancelled" || event.type === "appointment:booked") {
             loadDashboard();
             if (event.type === "patient:called") toast.success(`Your turn! Token ${event.token}`);
-            if (event.type === "visit:cancelled") toast.error("Your visit was cancelled by admin");
+            if (event.type === "visit:cancelled" && !selfCancelRef.current) toast.error("Your visit was cancelled by admin");
           }
         } catch { /* ignore parse errors */ }
       };
@@ -105,6 +108,22 @@ export default function PatientDashboard() {
       setHealthIssue("");
       await loadDashboard();
     } finally { setJoining(false); }
+  };
+
+  const cancelVisit = async (visitId: string) => {
+    setCancelling(visitId);
+    selfCancelRef.current = true;
+    try {
+      const res = await fetch(`/api/patient/visits/${visitId}`, { method: "PATCH" });
+      const d = await res.json();
+      if (!res.ok) { toast.error(d.error ?? "Failed to cancel"); return; }
+      toast.success("Visit cancelled successfully");
+      setCancelConfirm(null);
+      await loadDashboard();
+    } finally {
+      setCancelling(null);
+      setTimeout(() => { selfCancelRef.current = false; }, 2000);
+    }
   };
 
   const bookAppointment = async () => {
@@ -176,13 +195,28 @@ export default function PatientDashboard() {
                 <div style={S.infoGrid}>
                   <div style={S.infoItem}><span style={S.infoLabel}>Visit ID</span><span style={S.infoVal}>{todayVisit.visitId}</span></div>
                   {todayVisit.doctor && <div style={S.infoItem}><span style={S.infoLabel}>Assigned Doctor</span><span style={S.infoVal}>{todayVisit.doctor.user.name}</span></div>}
-                  {!["COMPLETED","CANCELLED"].includes(todayVisit.status) && (
+                  {!["COMPLETED","CANCELLED","IN_CONSULTATION"].includes(todayVisit.status) && (
                     <>
                       <div style={S.infoItem}><span style={S.infoLabel}>Patients Ahead</span><span style={S.infoVal}>{queueAhead}</span></div>
                       <div style={S.infoItem}><span style={S.infoLabel}>Estimated Wait</span><span style={S.infoVal}>{estimatedWait} min</span></div>
                     </>
                   )}
                 </div>
+                {["WAITING","ASSIGNED"].includes(todayVisit.status) && (
+                  <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid #F0EEEB" }}>
+                    {cancelConfirm === todayVisit.id ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ fontSize: 13.5, color: "#555" }}>Cancel your visit today?</span>
+                        <button style={S.cancelDangerBtn} onClick={() => cancelVisit(todayVisit.id)} disabled={cancelling === todayVisit.id}>
+                          {cancelling === todayVisit.id ? "Cancelling…" : "Yes, Cancel"}
+                        </button>
+                        <button style={S.cancelGhostBtn} onClick={() => setCancelConfirm(null)}>Keep</button>
+                      </div>
+                    ) : (
+                      <button style={S.cancelOutlineBtn} onClick={() => setCancelConfirm(todayVisit.id)}>Cancel My Visit</button>
+                    )}
+                  </div>
+                )}
               </div>
             ) : (
               <div style={S.emptyCard}>
@@ -256,7 +290,22 @@ export default function PatientDashboard() {
                     {STATUS_LABEL[appt.status] ?? appt.status}
                   </span>
                 </div>
-                {appt.healthIssue && <div style={S.sectionText}>{appt.healthIssue}</div>}
+                {appt.healthIssue && <div style={{ ...S.sectionText, marginBottom: 10 }}>{appt.healthIssue}</div>}
+                {["SCHEDULED","WAITING","ASSIGNED"].includes(appt.status) && (
+                  <div style={{ paddingTop: 10, borderTop: "1px solid #F0EEEB" }}>
+                    {cancelConfirm === appt.id ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ fontSize: 13, color: "#555" }}>Cancel this appointment?</span>
+                        <button style={S.cancelDangerBtn} onClick={() => cancelVisit(appt.id)} disabled={cancelling === appt.id}>
+                          {cancelling === appt.id ? "Cancelling…" : "Yes, Cancel"}
+                        </button>
+                        <button style={S.cancelGhostBtn} onClick={() => setCancelConfirm(null)}>Keep</button>
+                      </div>
+                    ) : (
+                      <button style={S.cancelOutlineBtn} onClick={() => setCancelConfirm(appt.id)}>Cancel Appointment</button>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -341,5 +390,8 @@ const S: Record<string, React.CSSProperties> = {
   historySection:{ marginBottom: 10 },
   sectionLabel: { fontSize: 11, fontWeight: 700, color: "#999", letterSpacing: ".07em", textTransform: "uppercase" as const, marginBottom: 4 },
   sectionText:  { fontSize: 13.5, color: "#333", lineHeight: 1.5 },
-  historyFooter:{ fontSize: 12, color: "#aaa", marginTop: 8 },
+  historyFooter:    { fontSize: 12, color: "#aaa", marginTop: 8 },
+  cancelOutlineBtn: { padding: "7px 16px", background: "transparent", color: "#DC2626", border: "1.5px solid #FECACA", borderRadius: 8, fontSize: 12.5, fontWeight: 700, cursor: "pointer" },
+  cancelDangerBtn:  { padding: "6px 14px", background: "#DC2626", color: "#fff", border: "none", borderRadius: 8, fontSize: 12.5, fontWeight: 700, cursor: "pointer" },
+  cancelGhostBtn:   { padding: "6px 14px", background: "transparent", color: "#555", border: "1.5px solid #D0CEC9", borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: "pointer" },
 };
