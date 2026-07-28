@@ -188,7 +188,7 @@ JWT_SECRET="your-secret-key"
 | Admin | `sys.admin@hospital.com` | `admin123` |
 | Doctor | `dr.patel@hospital.com` | `doctor123` |
 | Doctor | `dr.sarah@hospital.com` | `doctor123` |
-| Patient | `john.smith@gmail.com` | `patient123` |
+| Patient | `arjun.k@gmail.com` | `patient123` |
 
 > ⚠️ Change all default credentials before any production deployment.
 
