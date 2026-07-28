@@ -42,14 +42,14 @@ export default function HealthSetupPage() {
 
   return (
     <div style={S.page}>
-      <div style={S.card}>
+      <div className="hs-card" style={S.card}>
         <div style={S.header}>
           <div style={S.step}>Step 2 of 2</div>
           <h1 style={S.title}>Health Profile Setup</h1>
           <p style={S.sub}>All fields below are required. If a field doesn&apos;t apply, enter <strong>None</strong>.</p>
         </div>
 
-        <div style={S.grid}>
+        <div className="hs-grid" style={S.grid}>
           <div style={S.field}>
             <label style={S.label}>Aadhaar Number <span style={S.opt}>(optional)</span></label>
             <input style={S.input} value={form.aadhaar} onChange={f("aadhaar")}
@@ -98,6 +98,13 @@ export default function HealthSetupPage() {
           </button>
         </div>
       </div>
+
+      <style>{`
+        @media (max-width: 639px) {
+          .hs-card { padding: 24px 18px !important; }
+          .hs-grid { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
     </div>
   );
 }

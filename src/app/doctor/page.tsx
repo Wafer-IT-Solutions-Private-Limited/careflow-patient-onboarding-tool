@@ -251,7 +251,7 @@ export default function DoctorDashboard() {
             </div>
           </div>
           <div style={S.headerRight}>
-            <div style={S.availRow}>
+            <div className="dr-avail-row" style={S.availRow}>
               {(["AVAILABLE", "ENGAGED", "OFFLINE"] as Availability[]).map(a => (
                 <button
                   key={a}
@@ -267,8 +267,8 @@ export default function DoctorDashboard() {
         </div>
       </header>
 
-      <main style={S.main}>
-        <div style={S.statsRow}>
+      <main className="dr-main" style={S.main}>
+        <div className="dr-stats" style={S.statsRow}>
           <div style={S.statCard}>
             <span style={S.statNum}>{todayCompleted}</span>
             <span style={S.statLabel}>Completed Today</span>
@@ -283,7 +283,7 @@ export default function DoctorDashboard() {
           </div>
         </div>
 
-        <div style={S.grid}>
+        <div className="dr-grid" style={S.grid}>
           {/* Current Patient Panel */}
           <div style={S.panel}>
             <div style={S.panelTitle}>Current Patient</div>
@@ -460,6 +460,21 @@ export default function DoctorDashboard() {
           </div>
         </div>
       </main>
+
+      <style>{`
+        @media (max-width: 639px) {
+          .dr-main       { padding: 16px 12px !important; }
+          .dr-stats      { grid-template-columns: 1fr !important; gap: 8px !important; }
+          .dr-grid       { grid-template-columns: 1fr !important; }
+          .dr-avail-row  { gap: 3px !important; }
+          .dr-avail-row button { padding: 4px 7px !important; font-size: 10px !important; }
+        }
+        @media (min-width: 640px) and (max-width: 1023px) {
+          .dr-main  { padding: 20px 18px !important; }
+          .dr-grid  { grid-template-columns: 1fr !important; }
+          .dr-stats { grid-template-columns: repeat(3, 1fr) !important; }
+        }
+      `}</style>
 
       {/* Patient History Modal */}
       {historyPatientId && (

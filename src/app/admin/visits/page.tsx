@@ -75,7 +75,7 @@ export default function AdminVisitsPage() {
     <div style={{ minHeight: "100vh", background: "#F5F4F2", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif" }}>
       <AdminHeader />
 
-      <main style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px" }}>
+      <main className="av-main" style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px" }}>
         <div style={{ marginBottom: 24 }}>
           <div style={{ fontSize: 22, fontWeight: 700, color: "#0C1929", marginBottom: 4 }}>All Visits</div>
           <div style={{ fontSize: 13, color: "#888" }}>Complete visit log across all patients</div>
@@ -97,7 +97,7 @@ export default function AdminVisitsPage() {
         )}
 
         {/* Filters */}
-        <div style={{ display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
+        <div className="av-filters" style={{ display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
           <input
             value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search patient, PRN, token…"
@@ -124,8 +124,8 @@ export default function AdminVisitsPage() {
           ) : filtered.length === 0 ? (
             <div style={{ padding: 60, textAlign: "center", color: "#aaa" }}>No visits found.</div>
           ) : (
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <div className="av-table-wrap" style={{ overflowX: "auto" }}>
+              <table className="av-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead>
                   <tr style={{ borderBottom: "1.5px solid #F0EEEA", background: "#FAFAF8" }}>
                     {["Date & Time", "Token", "Patient", "PRN", "Doctor", "Status", "Payment", "Note"].map(h => (
@@ -140,18 +140,18 @@ export default function AdminVisitsPage() {
                       <tr key={v.id} style={{ borderBottom: "1px solid #F8F7F5" }}
                         onMouseEnter={e => (e.currentTarget.style.background = "#FAFAF8")}
                         onMouseLeave={e => (e.currentTarget.style.background = "")}>
-                        <td style={{ padding: "11px 14px", color: "#555", whiteSpace: "nowrap", fontSize: 12 }}>{fmt(v.visitDate)}</td>
-                        <td style={{ padding: "11px 14px", fontWeight: 800, fontSize: 15, color: "#0C1929" }}>{v.token}</td>
-                        <td style={{ padding: "11px 14px", fontWeight: 600, color: "#111" }}>{v.patient.name}</td>
-                        <td style={{ padding: "11px 14px", fontSize: 12, color: "#6D28D9", fontWeight: 700 }}>{v.patient.prn}</td>
-                        <td style={{ padding: "11px 14px", color: "#555" }}>{v.doctor?.user.name ?? <span style={{ color: "#ccc" }}>—</span>}</td>
-                        <td style={{ padding: "11px 14px" }}>
+                        <td data-label="Date" style={{ padding: "11px 14px", color: "#555", whiteSpace: "nowrap", fontSize: 12 }}>{fmt(v.visitDate)}</td>
+                        <td data-label="Token" style={{ padding: "11px 14px", fontWeight: 800, fontSize: 15, color: "#0C1929" }}>{v.token}</td>
+                        <td data-label="Patient" style={{ padding: "11px 14px", fontWeight: 600, color: "#111" }}>{v.patient.name}</td>
+                        <td data-label="PRN" style={{ padding: "11px 14px", fontSize: 12, color: "#6D28D9", fontWeight: 700 }}>{v.patient.prn}</td>
+                        <td data-label="Doctor" style={{ padding: "11px 14px", color: "#555" }}>{v.doctor?.user.name ?? <span style={{ color: "#ccc" }}>—</span>}</td>
+                        <td data-label="Status" style={{ padding: "11px 14px" }}>
                           <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 12, background: c.bg, color: c.text, whiteSpace: "nowrap" }}>
                             {v.status.replace(/_/g, " ")}
                           </span>
                         </td>
-                        <td style={{ padding: "11px 14px", color: "#777", fontSize: 12 }}>{v.paymentType ?? <span style={{ color: "#ccc" }}>—</span>}</td>
-                        <td style={{ padding: "11px 14px", color: "#DC2626", fontSize: 12, maxWidth: 200 }}>
+                        <td data-label="Payment" style={{ padding: "11px 14px", color: "#777", fontSize: 12 }}>{v.paymentType ?? <span style={{ color: "#ccc" }}>—</span>}</td>
+                        <td data-label="Note" style={{ padding: "11px 14px", color: "#DC2626", fontSize: 12, maxWidth: 200 }}>
                           {v.cancelReason ?? <span style={{ color: "#ccc" }}>—</span>}
                         </td>
                       </tr>
@@ -163,6 +163,48 @@ export default function AdminVisitsPage() {
           )}
         </div>
       </main>
+
+      <style>{`
+        @media (max-width: 639px) {
+          .av-main { padding: 20px 14px !important; }
+          .av-table-wrap { overflow-x: visible !important; }
+          .av-table thead { display: none; }
+          .av-table tbody tr {
+            display: block;
+            border-radius: 12px;
+            border: 1.5px solid #E8E6E3 !important;
+            margin-bottom: 10px;
+            padding: 2px 0;
+            background: #fff;
+          }
+          .av-table tbody td {
+            display: flex !important;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 9px 14px !important;
+            border-bottom: 1px solid #F5F3F0;
+            font-size: 13px !important;
+            white-space: normal !important;
+            max-width: 100% !important;
+          }
+          .av-table tbody td:last-child { border-bottom: none; }
+          .av-table tbody td::before {
+            content: attr(data-label);
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            color: #999;
+            min-width: 70px;
+            flex-shrink: 0;
+            padding-top: 2px;
+          }
+        }
+        @media (min-width: 640px) and (max-width: 1023px) {
+          .av-main { padding: 24px 18px !important; }
+        }
+      `}</style>
     </div>
   );
 }

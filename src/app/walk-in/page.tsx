@@ -113,7 +113,7 @@ export default function WalkInPage() {
   if (visitResult) {
     return (
       <div style={S.page}>
-        <div style={S.card}>
+        <div className="wi-card" style={S.card}>
           <div style={S.successIcon}>✓</div>
           <h2 style={S.successTitle}>Patient Queued Successfully</h2>
           {visitResult.prn && (
@@ -139,6 +139,7 @@ export default function WalkInPage() {
           {visitResult.doctorName && <div style={S.infoRow}><span style={S.infoLabel}>Assigned Doctor</span><span style={S.infoVal}>{visitResult.doctorName}</span></div>}
           <button style={S.btn} onClick={reset}>Register Another Patient</button>
         </div>
+        <WalkInStyles />
       </div>
     );
   }
@@ -147,10 +148,10 @@ export default function WalkInPage() {
   if (step === "home") {
     return (
       <div style={S.page}>
-        <div style={S.card}>
+        <div className="wi-card" style={S.card}>
           <h1 style={S.title}>Walk-In Registration</h1>
           <p style={S.sub}>Look up a returning patient or register a new one.</p>
-          <div style={S.homeGrid}>
+          <div className="wi-home-grid" style={S.homeGrid}>
             <button style={S.homeCard} onClick={() => setStep("lookup")}>
               <span style={S.homeIcon}>🔍</span>
               <span style={S.homeCardTitle}>Returning Patient</span>
@@ -163,6 +164,7 @@ export default function WalkInPage() {
             </button>
           </div>
         </div>
+        <WalkInStyles />
       </div>
     );
   }
@@ -171,7 +173,7 @@ export default function WalkInPage() {
   if (step === "lookup") {
     return (
       <div style={S.page}>
-        <div style={S.card}>
+        <div className="wi-card" style={S.card}>
           <button style={S.back} onClick={() => { setStep("home"); setLookupVal(""); }}>← Back</button>
           <h1 style={S.title}>Find Returning Patient</h1>
           <div style={S.tabRow}>
@@ -181,7 +183,7 @@ export default function WalkInPage() {
               </button>
             ))}
           </div>
-          <div style={S.row}>
+          <div className="wi-row" style={S.row}>
             <input
               style={S.input}
               placeholder={lookupMode === "prn" ? "PAT-YYYYMMDD-XXXX" : lookupMode === "phone" ? "10-digit phone number" : "12-digit Aadhaar number"}
@@ -193,6 +195,7 @@ export default function WalkInPage() {
           </div>
           <p style={S.orText}>Patient not in system? <button style={S.linkBtn} onClick={() => setStep("new")}>Register new patient →</button></p>
         </div>
+        <WalkInStyles />
       </div>
     );
   }
@@ -201,7 +204,7 @@ export default function WalkInPage() {
   if (step === "confirm" && patient) {
     return (
       <div style={S.page}>
-        <div style={S.card}>
+        <div className="wi-card" style={S.card}>
           <button style={S.back} onClick={() => { setPatient(null); setStep("lookup"); }}>← Back</button>
           <h1 style={S.title}>Confirm Patient</h1>
           <div style={S.patientCard}>
@@ -226,11 +229,12 @@ export default function WalkInPage() {
               {PAYMENT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
-          <div style={S.btnRow}>
+          <div className="wi-btn-row" style={S.btnRow}>
             <button style={S.btnSecondary} onClick={() => { setPatient(null); setStep("lookup"); }}>← Back</button>
             <button style={S.btn} onClick={() => addToQueue(patient.id)} disabled={loading}>{loading ? "Queuing…" : "Add to Queue"}</button>
           </div>
         </div>
+        <WalkInStyles />
       </div>
     );
   }
@@ -238,11 +242,11 @@ export default function WalkInPage() {
   // ── New patient form ─────────────────────────────────────────────────────────
   return (
     <div style={S.page}>
-      <div style={S.card}>
+      <div className="wi-card" style={S.card}>
         <button style={S.back} onClick={() => setStep("home")}>← Back</button>
         <h1 style={S.title}>Register New Patient</h1>
         <p style={{ fontSize: 13, color: "#888", marginBottom: 20 }}>All fields marked * are required.</p>
-        <div style={S.grid2}>
+        <div className="wi-grid2" style={S.grid2}>
           <div style={S.field}><label style={S.label}>Full Name *</label><input style={S.input} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Full legal name" /></div>
           <div style={S.field}><label style={S.label}>Date of Birth *</label><input style={S.input} type="date" value={form.dateOfBirth} onChange={e => setForm(f => ({ ...f, dateOfBirth: e.target.value }))} /></div>
           <div style={S.field}><label style={S.label}>Gender *</label>
@@ -273,12 +277,27 @@ export default function WalkInPage() {
             </select>
           </div>
         </div>
-        <div style={S.btnRow}>
+        <div className="wi-btn-row" style={S.btnRow}>
           <button style={S.btnSecondary} onClick={() => setStep("home")}>← Back</button>
           <button style={S.btn} onClick={createNewPatient} disabled={loading}>{loading ? "Registering…" : "Register & Add to Queue"}</button>
         </div>
       </div>
+      <WalkInStyles />
     </div>
+  );
+}
+
+function WalkInStyles() {
+  return (
+    <style>{`
+      @media (max-width: 639px) {
+        .wi-card     { padding: 24px 18px !important; }
+        .wi-home-grid{ grid-template-columns: 1fr !important; }
+        .wi-grid2    { grid-template-columns: 1fr !important; }
+        .wi-row      { flex-direction: column !important; }
+        .wi-btn-row  { flex-direction: column !important; }
+      }
+    `}</style>
   );
 }
 
@@ -293,7 +312,7 @@ const S: Record<string, React.CSSProperties> = {
   homeIcon:     { fontSize: 28, marginBottom: 4 },
   homeCardTitle:{ fontSize: 16, fontWeight: 700, color: "#0C1929" },
   homeCardSub:  { fontSize: 12, color: "#888" },
-  tabRow:       { display: "flex", gap: 8, marginBottom: 20, borderBottom: "1.5px solid #E2E0DC", paddingBottom: 12 },
+  tabRow:       { display: "flex", gap: 8, marginBottom: 20, borderBottom: "1.5px solid #E2E0DC", paddingBottom: 12, flexWrap: "wrap" as const },
   tab:          { background: "none", border: "none", fontSize: 14, fontWeight: 600, color: "#888", cursor: "pointer", padding: "6px 14px", borderRadius: 8 },
   tabActive:    { background: "#0C1929", color: "#fff" },
   label:        { display: "block", fontSize: 11, fontWeight: 700, letterSpacing: ".07em", textTransform: "uppercase" as const, color: "#666", marginBottom: 6 },

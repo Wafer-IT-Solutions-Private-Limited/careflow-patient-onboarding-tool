@@ -171,13 +171,13 @@ export default function PatientDashboard() {
         </div>
       </header>
 
-      <main style={S.main}>
+      <main className="pp-main" style={S.main}>
         <div style={S.welcome}>
           <h1 style={S.welcomeH}>Welcome, {patient.name}</h1>
           <p style={S.welcomeSub}>PRN: <strong>{patient.prn}</strong></p>
         </div>
 
-        <div style={S.tabs}>
+        <div className="pp-tabs" style={S.tabs}>
           <button style={{ ...S.tab, ...(tab === "today"        ? S.tabActive : {}) }} onClick={() => setTab("today")}>Today&apos;s Appointment</button>
           <button style={{ ...S.tab, ...(tab === "appointments" ? S.tabActive : {}) }} onClick={() => setTab("appointments")}>
             Appointments {upcomingAppointments?.length > 0 && <span style={S.badge}>{upcomingAppointments.length}</span>}
@@ -209,7 +209,7 @@ export default function PatientDashboard() {
                     {STATUS_LABEL[todayVisit.status] ?? todayVisit.status}
                   </span>
                 </div>
-                <div style={S.infoGrid}>
+                <div className="pp-info-grid" style={S.infoGrid}>
                   <div style={S.infoItem}><span style={S.infoLabel}>Visit ID</span><span style={S.infoVal}>{todayVisit.visitId}</span></div>
                   {todayVisit.doctor && <div style={S.infoItem}><span style={S.infoLabel}>Assigned Doctor</span><span style={S.infoVal}>{todayVisit.doctor.user.name}</span></div>}
                   {!["COMPLETED","CANCELLED","IN_CONSULTATION"].includes(todayVisit.status) && (
@@ -274,7 +274,7 @@ export default function PatientDashboard() {
             {showApptForm && (
               <div style={{ ...S.visitCard, marginBottom: 20 }}>
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: "#0C1929", marginBottom: 16 }}>Book a Future Appointment</h3>
-                <div style={S.apptForm}>
+                <div className="pp-appt-form" style={S.apptForm}>
                   <div>
                     <label style={S.fieldLabel}>Appointment Date *</label>
                     <input type="date" style={S.input} min={minDateStr} value={apptDate} onChange={e => setApptDate(e.target.value)} />
@@ -367,6 +367,19 @@ export default function PatientDashboard() {
           </div>
         )}
       </main>
+
+      <style>{`
+        @media (max-width: 639px) {
+          .pp-main       { padding: 20px 14px !important; }
+          .pp-tabs       { flex-wrap: wrap !important; }
+          .pp-tabs button { flex: none !important; font-size: 12px !important; padding: 8px 10px !important; }
+          .pp-info-grid  { grid-template-columns: 1fr !important; }
+          .pp-appt-form  { grid-template-columns: 1fr !important; }
+        }
+        @media (min-width: 640px) and (max-width: 1023px) {
+          .pp-main { padding: 24px 18px !important; }
+        }
+      `}</style>
     </div>
   );
 }

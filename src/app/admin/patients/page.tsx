@@ -179,17 +179,17 @@ export default function AdminPatientsPage() {
   return (
     <div style={{ minHeight: "100vh", background: "#F8F7F5", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif" }}>
       <AdminHeader />
-      <main style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px" }}>
+      <main className="apm-main" style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px" }}>
         <div style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 20, fontWeight: 700, color: "#111" }}>Patient Management</div>
           <div style={{ fontSize: 13, color: "#888" }}>View, edit and manage registered patients</div>
         </div>
         <div>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, gap: 12, flexWrap: "wrap" }}>
             <input
               value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Search by name, email or PRN…"
-              style={{ flex: 1, maxWidth: 380, padding: "9px 14px", border: "1.5px solid #E2E0DC", borderRadius: 9, fontSize: 14, outline: "none", background: "#fff" }}
+              style={{ flex: 1, maxWidth: 380, minWidth: 200, padding: "9px 14px", border: "1.5px solid #E2E0DC", borderRadius: 9, fontSize: 14, outline: "none", background: "#fff" }}
             />
             <div style={{ fontSize: 13, color: "#888", fontWeight: 500 }}>{filtered.length} patient{filtered.length !== 1 ? "s" : ""}</div>
           </div>
@@ -202,8 +202,8 @@ export default function AdminPatientsPage() {
                 {search ? "No patients match your search." : "No patients registered yet."}
               </div>
             ) : (
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <div className="apm-table-wrap" style={{ overflowX: "auto" }}>
+                <table className="apm-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                   <thead>
                     <tr style={{ borderBottom: "1px solid #F0EEEA" }}>
                       {["Patient", "PRN", "Email", "Phone", "Gender", "Registered", "Status", "Actions"].map(h => (
@@ -213,10 +213,8 @@ export default function AdminPatientsPage() {
                   </thead>
                   <tbody>
                     {filtered.map(p => (
-                      <tr key={p.id} style={{ borderBottom: "1px solid #F8F7F5" }}
-                        onMouseEnter={e => (e.currentTarget.style.background = "#FAFAF8")}
-                        onMouseLeave={e => (e.currentTarget.style.background = "")}>
-                        <td style={{ padding: "12px 14px" }}>
+                      <tr key={p.id} style={{ borderBottom: "1px solid #F8F7F5" }}>
+                        <td data-label="Patient" style={{ padding: "12px 14px" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
                             <div style={{ width: 32, height: 32, borderRadius: "50%", flexShrink: 0, background: "#EDE9FE", color: "#6D28D9", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 13 }}>
                               {p.name.charAt(0).toUpperCase()}
@@ -224,17 +222,17 @@ export default function AdminPatientsPage() {
                             <span style={{ fontWeight: 600, color: "#111" }}>{p.name}</span>
                           </div>
                         </td>
-                        <td style={{ padding: "12px 14px", fontSize: 12, fontWeight: 700, color: "#6D28D9", whiteSpace: "nowrap" }}>{p.patientProfile?.prn ?? "—"}</td>
-                        <td style={{ padding: "12px 14px", color: "#555" }}>{p.email}</td>
-                        <td style={{ padding: "12px 14px", color: "#777" }}>{p.patientProfile?.phone ?? "—"}</td>
-                        <td style={{ padding: "12px 14px", color: "#777" }}>{p.patientProfile?.gender ?? "—"}</td>
-                        <td style={{ padding: "12px 14px", color: "#777", whiteSpace: "nowrap" }}>{fmt(p.createdAt)}</td>
-                        <td style={{ padding: "12px 14px" }}>
+                        <td data-label="PRN" style={{ padding: "12px 14px", fontSize: 12, fontWeight: 700, color: "#6D28D9", whiteSpace: "nowrap" }}>{p.patientProfile?.prn ?? "—"}</td>
+                        <td data-label="Email" style={{ padding: "12px 14px", color: "#555" }}>{p.email}</td>
+                        <td data-label="Phone" style={{ padding: "12px 14px", color: "#777" }}>{p.patientProfile?.phone ?? "—"}</td>
+                        <td data-label="Gender" style={{ padding: "12px 14px", color: "#777" }}>{p.patientProfile?.gender ?? "—"}</td>
+                        <td data-label="Registered" style={{ padding: "12px 14px", color: "#777", whiteSpace: "nowrap" }}>{fmt(p.createdAt)}</td>
+                        <td data-label="Status" style={{ padding: "12px 14px" }}>
                           <span style={{ padding: "3px 10px", borderRadius: 100, fontSize: 11, fontWeight: 700, background: p.isVerified ? "#ECFDF5" : "#FEF3C7", color: p.isVerified ? "#065F46" : "#92400E" }}>
                             {p.isVerified ? "Active" : "Pending"}
                           </span>
                         </td>
-                        <td style={{ padding: "12px 14px" }}>
+                        <td data-label="Actions" style={{ padding: "12px 14px" }}>
                           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const }}>
                             <button onClick={() => openHistory(p)} style={{ ...btn, color: "#2563EB", borderColor: "#93C5FD" }}>History</button>
                             <button onClick={() => openEdit(p)} style={btn}>Edit</button>
@@ -257,7 +255,7 @@ export default function AdminPatientsPage() {
         <div style={overlay}>
           <div style={{ ...modal, maxWidth: 560 }}>
             <div style={modalHdr}>Edit Patient</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 16px", marginBottom: 16 }}>
+            <div className="apm-modal-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 16px", marginBottom: 16 }}>
               {([
                 { key: "name",         label: "Full Name",     type: "text"  },
                 { key: "email",        label: "Email",         type: "email" },
@@ -378,6 +376,47 @@ export default function AdminPatientsPage() {
           </div>
         </div>
       )}
+
+      <style>{`
+        @media (max-width: 639px) {
+          .apm-main { padding: 20px 14px !important; }
+          .apm-table-wrap { overflow-x: visible !important; }
+          .apm-table thead { display: none; }
+          .apm-table tbody tr {
+            display: block;
+            border-radius: 12px;
+            border: 1.5px solid #E8E6E3 !important;
+            margin-bottom: 10px;
+            padding: 2px 0;
+            background: #fff;
+          }
+          .apm-table tbody td {
+            display: flex !important;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 9px 14px !important;
+            border-bottom: 1px solid #F5F3F0;
+            font-size: 13px !important;
+          }
+          .apm-table tbody td:last-child { border-bottom: none; }
+          .apm-table tbody td::before {
+            content: attr(data-label);
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            color: #999;
+            min-width: 80px;
+            flex-shrink: 0;
+            padding-top: 2px;
+          }
+          .apm-modal-grid { grid-template-columns: 1fr !important; }
+        }
+        @media (min-width: 640px) and (max-width: 1023px) {
+          .apm-main { padding: 24px 18px !important; }
+        }
+      `}</style>
     </div>
   );
 }

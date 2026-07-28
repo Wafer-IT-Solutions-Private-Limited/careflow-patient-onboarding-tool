@@ -122,8 +122,8 @@ export default function AdminDoctorsPage() {
   return (
     <div style={S.page}>
       <AdminHeader />
-      <main style={S.main}>
-        <div style={S.topRow}>
+      <main className="adoc-main" style={S.main}>
+        <div className="adoc-top" style={S.topRow}>
           <h1 style={S.pageTitle}>Doctors ({doctors.length})</h1>
           <button style={S.addBtn} onClick={() => setShowAdd(true)}>+ Add Doctor</button>
         </div>
@@ -132,7 +132,7 @@ export default function AdminDoctorsPage() {
         {showAdd && (
           <div style={S.formCard}>
             <div style={S.formTitle}>Add New Doctor</div>
-            <div style={S.grid2}>
+            <div className="adoc-grid2" style={S.grid2}>
               {([
                 ["Full Name",       "name",           "text",     "Dr. Jane Doe"],
                 ["Email",          "email",          "email",    "dr.jane@hospital.com"],
@@ -165,30 +165,30 @@ export default function AdminDoctorsPage() {
 
         {/* Table */}
         <div style={S.tableCard}>
-          <div style={S.tableWrap}>
-            <table style={S.table}>
+          <div className="adoc-table-wrap" style={S.tableWrap}>
+            <table className="adoc-table" style={S.table}>
               <thead>
                 <tr>{["Doctor", "Email", "Specialization", "License", "Visits", "Availability", "Status", "Actions"].map(h => <th key={h} style={S.th}>{h}</th>)}</tr>
               </thead>
               <tbody>
                 {doctors.map(doc => (
                   <tr key={doc.id} style={S.tr}>
-                    <td style={S.td}><div style={S.doctorName}>{doc.user.name}</div></td>
-                    <td style={{ ...S.td, fontSize: 12, color: "#888" }}>{doc.user.email}</td>
-                    <td style={S.td}>{doc.specialization}</td>
-                    <td style={{ ...S.td, fontSize: 12 }}>{doc.licenseNumber}</td>
-                    <td style={{ ...S.td, textAlign: "center" }}>{doc._count.visits}</td>
-                    <td style={S.td}>
+                    <td data-label="Doctor" style={S.td}><div style={S.doctorName}>{doc.user.name}</div></td>
+                    <td data-label="Email" style={{ ...S.td, fontSize: 12, color: "#888" }}>{doc.user.email}</td>
+                    <td data-label="Specialization" style={S.td}>{doc.specialization}</td>
+                    <td data-label="License" style={{ ...S.td, fontSize: 12 }}>{doc.licenseNumber}</td>
+                    <td data-label="Visits" style={{ ...S.td, textAlign: "center" }}>{doc._count.visits}</td>
+                    <td data-label="Availability" style={S.td}>
                       <span style={{ fontSize: 12, fontWeight: 700, color: AVAIL_COLOR[doc.availability] ?? "#888" }}>
                         {doc.availability}
                       </span>
                     </td>
-                    <td style={S.td}>
+                    <td data-label="Status" style={S.td}>
                       <span style={{ ...S.pill, background: doc.approved ? "#D1FAE5" : "#FEF3C7", color: doc.approved ? "#065F46" : "#92400E" }}>
                         {doc.approved ? "Approved" : "Pending"}
                       </span>
                     </td>
-                    <td style={S.td}>
+                    <td data-label="Actions" style={S.td}>
                       <div style={S.actBtns}>
                         <button style={{ ...S.actBtn, color: "#2563EB" }} onClick={() => openEdit(doc)}>Edit</button>
                         <button style={{ ...S.actBtn, color: "#D97706" }} onClick={() => { setResetPwd(doc); setNewPwd(""); }}>Reset Pwd</button>
@@ -211,7 +211,7 @@ export default function AdminDoctorsPage() {
         <div style={overlay}>
           <div style={{ ...modal, maxWidth: 480 }}>
             <div style={modalHdr}>Edit Doctor — {editing.user.name}</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 16px", marginBottom: 20 }}>
+            <div className="adoc-modal-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 16px", marginBottom: 20 }}>
               {([
                 { key: "name",           label: "Full Name",     type: "text"  },
                 { key: "email",          label: "Email",         type: "email" },
@@ -275,6 +275,51 @@ export default function AdminDoctorsPage() {
           </div>
         </div>
       )}
+
+      <style>{`
+        @media (max-width: 639px) {
+          .adoc-main { padding: 20px 14px !important; }
+          .adoc-top  { flex-direction: column !important; align-items: flex-start !important; gap: 12px !important; }
+          .adoc-grid2 { grid-template-columns: 1fr !important; }
+          .adoc-table-wrap { overflow-x: visible !important; }
+          .adoc-table thead { display: none; }
+          .adoc-table tbody tr {
+            display: block;
+            border-radius: 12px;
+            border: 1.5px solid #E8E6E3 !important;
+            margin-bottom: 10px;
+            padding: 2px 0;
+            background: #fff;
+          }
+          .adoc-table tbody td {
+            display: flex !important;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 9px 14px !important;
+            border-bottom: 1px solid #F5F3F0;
+            font-size: 13px !important;
+            text-align: left !important;
+          }
+          .adoc-table tbody td:last-child { border-bottom: none; }
+          .adoc-table tbody td::before {
+            content: attr(data-label);
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            color: #999;
+            min-width: 80px;
+            flex-shrink: 0;
+            padding-top: 2px;
+          }
+          .adoc-modal-grid { grid-template-columns: 1fr !important; }
+        }
+        @media (min-width: 640px) and (max-width: 1023px) {
+          .adoc-main { padding: 24px 18px !important; }
+          .adoc-grid2 { grid-template-columns: 1fr 1fr !important; }
+        }
+      `}</style>
     </div>
   );
 }
@@ -290,14 +335,6 @@ const primaryBtn:React.CSSProperties = { flex: 1, padding: "10px", border: "none
 const S: Record<string, React.CSSProperties> = {
   loading:     { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "system-ui,sans-serif", color: "#888" },
   page:        { minHeight: "100vh", background: "#F5F4F2", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif" },
-  header:      { background: "#0C1929", padding: "0 24px" },
-  headerInner: { maxWidth: 1200, margin: "0 auto", height: 60, display: "flex", alignItems: "center", justifyContent: "space-between" },
-  brand:       { display: "flex", alignItems: "center", gap: 10 },
-  logo:        { height: 28, filter: "brightness(0) invert(1)" },
-  brandName:   { fontSize: 15, fontWeight: 700, color: "#fff" },
-  headerRight: { display: "flex", alignItems: "center", gap: 12 },
-  navLink:     { fontSize: 13.5, color: "rgba(255,255,255,.75)", textDecoration: "none" },
-  logoutBtn:   { fontSize: 12.5, color: "rgba(255,255,255,.6)", background: "transparent", border: "1px solid rgba(255,255,255,.2)", borderRadius: 8, padding: "5px 12px", cursor: "pointer" },
   main:        { maxWidth: 1200, margin: "0 auto", padding: "32px 24px" },
   topRow:      { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 },
   pageTitle:   { fontSize: 22, fontWeight: 700, color: "#0C1929" },
@@ -319,6 +356,6 @@ const S: Record<string, React.CSSProperties> = {
   td:          { padding: "13px 14px", fontSize: 13.5, color: "#333" },
   doctorName:  { fontWeight: 600, color: "#0C1929" },
   pill:        { fontSize: 11.5, fontWeight: 700, padding: "3px 10px", borderRadius: 12 },
-  actBtns:     { display: "flex", gap: 10 },
+  actBtns:     { display: "flex", gap: 10, flexWrap: "wrap" },
   actBtn:      { background: "none", border: "none", fontSize: 12.5, fontWeight: 600, cursor: "pointer", padding: "2px 0" },
 };
