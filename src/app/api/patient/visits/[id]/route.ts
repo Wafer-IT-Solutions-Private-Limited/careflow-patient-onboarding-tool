@@ -33,7 +33,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     ]);
 
     await logAudit({ userId: jwt.id, userRole: "PATIENT", action: "CANCEL_VISIT", entity: "Visit", entityId: id });
-    emitSSE({ type: "visit:cancelled", room: `patient:${patient.id}` });
+    emitSSE({ type: "visit:cancelled", room: `patient:${patient.id}`, visitId: id });
     emitSSE({ type: "queue:updated", room: "admin" });
     if (visit.doctorId) {
       emitSSE({ type: "queue:updated", room: `doctor:${visit.doctorId}` });

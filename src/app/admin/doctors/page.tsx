@@ -143,7 +143,7 @@ export default function AdminDoctorsPage() {
                 <div key={key} style={S.field}>
                   <label style={S.label}>{label}</label>
                   <input style={S.input} type={type} placeholder={placeholder}
-                    value={(addForm as Record<string, string>)[key]}
+                    value={(addForm as Record<string, unknown>)[key] as string}
                     onChange={e => setAddForm(f => ({ ...f, [key]: e.target.value }))} />
                 </div>
               ))}

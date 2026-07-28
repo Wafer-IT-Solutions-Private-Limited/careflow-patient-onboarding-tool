@@ -10,5 +10,6 @@ interface AuditOptions {
 }
 
 export async function logAudit(opts: AuditOptions): Promise<void> {
-  await prisma.auditLog.create({ data: opts }).catch(() => {});
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await prisma.auditLog.create({ data: opts as any }).catch(() => {});
 }

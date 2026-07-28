@@ -52,7 +52,8 @@ export default function DoctorDashboard() {
 
   // Voice recognition state
   const [listening, setListening]       = useState<ListeningField>(null);
-  const recognitionRef  = useRef<SpeechRecognition | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef  = useRef<any>(null);
   const baseTextRef     = useRef("");
   const finalAccumRef   = useRef("");
 
@@ -130,12 +131,14 @@ export default function DoctorDashboard() {
     baseTextRef.current   = currentVal.trim();
     finalAccumRef.current = "";
 
-    const rec: SpeechRecognition = new SR();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rec: any = new SR();
     rec.continuous      = true;
     rec.interimResults  = true;
     rec.lang            = "en-IN";
 
-    rec.onresult = (event: SpeechRecognitionEvent) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rec.onresult = (event: any) => {
       let newFinals = "";
       let interim   = "";
       for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -159,7 +162,8 @@ export default function DoctorDashboard() {
       setListening(null);
     };
 
-    rec.onerror = (event: SpeechRecognitionErrorEvent) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rec.onerror = (event: any) => {
       if (event.error !== "aborted") toast.error(`Microphone error: ${event.error}`);
       recognitionRef.current = null;
       setListening(null);
