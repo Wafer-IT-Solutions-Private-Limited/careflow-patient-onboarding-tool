@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     if (!["ADMIN", "DOCTOR"].includes(jwt.role))
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    const { patientId, priority } = await req.json();
+    const { patientId, priority, paymentType } = await req.json();
     if (!patientId) return NextResponse.json({ error: "patientId is required" }, { status: 400 });
 
     const patient = await prisma.patient.findUnique({ where: { id: patientId } });
@@ -46,6 +46,7 @@ export async function POST(req: NextRequest) {
         status: doctorId ? "ASSIGNED" : "WAITING",
         queuePosition: queuePos,
         priority: priority ?? patient.priority ?? "NORMAL",
+        paymentType: paymentType ?? null,
         queue: {
           create: {
             doctorId: doctorId ?? undefined,

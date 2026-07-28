@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyToken } from "@/lib/auth";
 
 const PROTECTED: Record<string, string[]> = {
-  "/admin":        ["ADMIN"],
-  "/doctor":       ["DOCTOR"],
-  "/patient":      ["PATIENT"],
-  "/walk-in":      ["ADMIN", "DOCTOR"],
-  "/health-setup": ["PATIENT"],
+  "/admin":           ["ADMIN"],
+  "/doctor":          ["DOCTOR"],
+  "/patient":         ["PATIENT"],
+  "/walk-in":         ["ADMIN", "DOCTOR"],
+  "/health-setup":    ["PATIENT"],
+  "/change-password": ["PATIENT", "ADMIN", "DOCTOR"],
 };
 
 export async function proxy(req: NextRequest) {
@@ -23,9 +24,14 @@ export async function proxy(req: NextRequest) {
     if (!allowedRoles.includes(payload.role)) {
       return NextResponse.redirect(new URL("/login", req.url));
     }
+
+    // Force password change before accessing any other route
+    if (payload.mustChangePassword && !pathname.startsWith("/change-password")) {
+      return NextResponse.redirect(new URL("/change-password", req.url));
+    }
+
     return NextResponse.next();
   } catch {
     return NextResponse.redirect(new URL("/login", req.url));
   }
 }
-

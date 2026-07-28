@@ -309,7 +309,7 @@ export default function DoctorDashboard() {
                 </div>
                 {currentVisit.healthIssue && (
                   <div style={S.complaint}>
-                    <div style={S.complaintLabel}>Chief Complaint</div>
+                    <div style={S.complaintLabel}>Patient Reported Symptoms</div>
                     <div style={S.complaintText}>{currentVisit.healthIssue}</div>
                   </div>
                 )}

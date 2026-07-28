@@ -20,17 +20,24 @@ export async function POST(req: NextRequest) {
 
     const { aadhaar, bloodGroup, allergies, chronicConditions, emergencyContact, emergencyPhone } = await req.json();
 
-    // Build healthIssues summary from structured inputs
-    const healthParts: string[] = [];
-    if (bloodGroup)         healthParts.push(`Blood Group: ${bloodGroup}`);
-    if (allergies)          healthParts.push(`Allergies: ${allergies}`);
-    if (chronicConditions)  healthParts.push(`Chronic Conditions: ${chronicConditions}`);
-    if (emergencyContact)   healthParts.push(`Emergency Contact: ${emergencyContact}${emergencyPhone ? ` (${emergencyPhone})` : ""}`);
+    // All fields are mandatory (values like "None" / "NA" are acceptable)
+    if (!bloodGroup?.trim())        return NextResponse.json({ error: "Blood group is required" }, { status: 400 });
+    if (!allergies?.trim())         return NextResponse.json({ error: "Allergies field is required (enter None if none)" }, { status: 400 });
+    if (!chronicConditions?.trim()) return NextResponse.json({ error: "Chronic conditions field is required (enter None if none)" }, { status: 400 });
+    if (!emergencyContact?.trim())  return NextResponse.json({ error: "Emergency contact name is required" }, { status: 400 });
+    if (!emergencyPhone?.trim())    return NextResponse.json({ error: "Emergency contact phone is required" }, { status: 400 });
+
+    const healthParts = [
+      `Blood Group: ${bloodGroup.trim()}`,
+      `Allergies: ${allergies.trim()}`,
+      `Chronic Conditions: ${chronicConditions.trim()}`,
+      `Emergency Contact: ${emergencyContact.trim()} (${emergencyPhone.trim()})`,
+    ];
 
     const updateData: Record<string, unknown> = {
       healthSetupComplete: true,
+      healthIssues: healthParts.join(" | "),
     };
-    if (healthParts.length) updateData.healthIssues = healthParts.join(" | ");
 
     // Handle Aadhaar â€” validate 12 digits, check uniqueness via hash
     if (aadhaar) {

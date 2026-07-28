@@ -10,33 +10,40 @@ interface PatientResult {
   visits?: { id: string; token: string; status: string; visitDate: string; visitId: string }[];
 }
 
+const PAYMENT_OPTIONS = [
+  { value: "Cash",                      label: "Cash" },
+  { value: "UPI",                       label: "UPI" },
+  { value: "Net Banking",               label: "Net Banking" },
+  { value: "Debit or Credit Card",      label: "Debit or Credit Card" },
+  { value: "Insurance Cashless Claims", label: "Insurance Cashless Claims" },
+];
+
 export default function WalkInPage() {
-  const [step, setStep]               = useState<Step>("home");
-  const [lookupMode, setLookupMode]   = useState<"prn" | "aadhaar">("prn");
-  const [lookupVal, setLookupVal]     = useState("");
-  const [patient, setPatient]         = useState<PatientResult | null>(null);
-  const [loading, setLoading]         = useState(false);
+  const [step, setStep]             = useState<Step>("home");
+  const [lookupMode, setLookupMode] = useState<"prn" | "aadhaar" | "phone">("prn");
+  const [lookupVal, setLookupVal]   = useState("");
+  const [patient, setPatient]       = useState<PatientResult | null>(null);
+  const [loading, setLoading]       = useState(false);
   const [visitResult, setVisitResult] = useState<{ token: string; visitId: string; doctorName?: string; prn?: string; tempPassword?: string } | null>(null);
+  const [visitPaymentType, setVisitPaymentType] = useState("Cash");
 
   const [form, setForm] = useState({
     name: "", dateOfBirth: "", gender: "", phone: "", aadhaar: "",
     address: "", city: "", state: "", pincode: "",
-    healthIssues: "", paymentType: "GENERAL", priority: "NORMAL",
+    healthIssues: "", priority: "NORMAL",
   });
 
   const lookup = async () => {
-    if (!lookupVal.trim()) { toast.error(`Enter a ${lookupMode === "prn" ? "PRN" : "Aadhaar number"}`); return; }
+    if (!lookupVal.trim()) { toast.error(`Enter a ${lookupMode === "prn" ? "PRN" : lookupMode === "aadhaar" ? "Aadhaar number" : "phone number"}`); return; }
     setLoading(true);
     try {
       const param = lookupMode === "prn"
         ? `prn=${encodeURIComponent(lookupVal.trim())}`
-        : `aadhaar=${encodeURIComponent(lookupVal.trim().replace(/\s/g, ""))}`;
+        : lookupMode === "phone"
+          ? `phone=${encodeURIComponent(lookupVal.trim())}`
+          : `aadhaar=${encodeURIComponent(lookupVal.trim().replace(/\s/g, ""))}`;
       const res = await fetch(`/api/walk-in/lookup?${param}`);
-      if (res.status === 404) {
-        toast.error("Patient not found. Register as a new patient.");
-        setStep("new");
-        return;
-      }
+      if (res.status === 404) { toast.error("Patient not found. Register as a new patient."); setStep("new"); return; }
       const data = await res.json();
       if (!res.ok) { toast.error(data.error); return; }
       setPatient(data.patient);
@@ -49,7 +56,7 @@ export default function WalkInPage() {
     try {
       const res = await fetch("/api/visits", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ patientId, priority: "NORMAL" }),
+        body: JSON.stringify({ patientId, priority: "NORMAL", paymentType: visitPaymentType }),
       });
       const data = await res.json();
       if (res.status === 409) { toast.error(data.error); return; }
@@ -59,7 +66,12 @@ export default function WalkInPage() {
   };
 
   const createNewPatient = async () => {
-    if (!form.name.trim()) { toast.error("Patient name is required"); return; }
+    if (!form.name.trim())        { toast.error("Patient name is required"); return; }
+    if (!form.phone.trim())       { toast.error("Phone number is required"); return; }
+    if (!form.dateOfBirth)        { toast.error("Date of birth is required"); return; }
+    if (!form.gender)             { toast.error("Gender is required"); return; }
+    if (!form.aadhaar.trim())     { toast.error("Aadhaar number is required"); return; }
+
     setLoading(true);
     try {
       const res = await fetch("/api/patients", {
@@ -67,30 +79,35 @@ export default function WalkInPage() {
         body: JSON.stringify(form),
       });
       const data = await res.json();
-      // Duplicate Aadhaar — offer to add existing patient to queue
       if (res.status === 409 && data.patient) {
-        toast.error("Aadhaar already registered. Adding existing patient to queue.");
+        toast.error("Patient already registered. Adding to queue.");
         await addToQueue(data.patient.id);
         return;
       }
       if (!res.ok) { toast.error(data.error ?? "Failed to register patient"); return; }
       toast.success(`Patient registered — PRN: ${data.patient.prn}`);
+
       const queueRes = await fetch("/api/visits", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ patientId: data.patient.id, priority: form.priority }),
+        body: JSON.stringify({ patientId: data.patient.id, priority: form.priority, paymentType: visitPaymentType }),
       });
       const queueData = await queueRes.json();
       if (!queueRes.ok) { toast.error(queueData.error ?? "Registered but failed to queue"); return; }
       setVisitResult({
-        token:      queueData.visit.token,
-        visitId:    queueData.visit.visitId,
-        doctorName: queueData.visit.doctor?.user?.name,
-        prn:        data.patient.prn,
+        token:        queueData.visit.token,
+        visitId:      queueData.visit.visitId,
+        doctorName:   queueData.visit.doctor?.user?.name,
+        prn:          data.patient.prn,
+        tempPassword: data.tempPassword,
       });
     } finally { setLoading(false); }
   };
 
-  const reset = () => { setStep("home"); setLookupVal(""); setPatient(null); setVisitResult(null); setForm({ name: "", dateOfBirth: "", gender: "", phone: "", aadhaar: "", address: "", city: "", state: "", pincode: "", healthIssues: "", paymentType: "GENERAL", priority: "NORMAL" }); };
+  const reset = () => {
+    setStep("home"); setLookupVal(""); setPatient(null); setVisitResult(null);
+    setVisitPaymentType("Cash");
+    setForm({ name: "", dateOfBirth: "", gender: "", phone: "", aadhaar: "", address: "", city: "", state: "", pincode: "", healthIssues: "", priority: "NORMAL" });
+  };
 
   // ── Success screen ──────────────────────────────────────────────────────────
   if (visitResult) {
@@ -100,9 +117,18 @@ export default function WalkInPage() {
           <div style={S.successIcon}>✓</div>
           <h2 style={S.successTitle}>Patient Queued Successfully</h2>
           {visitResult.prn && (
-            <div style={{ ...S.infoRow, background: "#F0F4FF", padding: "10px 16px", borderRadius: 10, marginBottom: 16 }}>
-              <span style={S.infoLabel}>PRN (save this)</span>
-              <span style={{ ...S.infoVal, fontWeight: 800, color: "#0C1929" }}>{visitResult.prn}</span>
+            <div style={{ background: "#F0F4FF", padding: "10px 16px", borderRadius: 10, marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={S.infoLabel}>PRN (save this)</span>
+                <span style={{ ...S.infoVal, fontWeight: 800, color: "#0C1929" }}>{visitResult.prn}</span>
+              </div>
+            </div>
+          )}
+          {visitResult.tempPassword && (
+            <div style={{ background: "#FFF7ED", border: "1.5px solid #FCD34D", borderRadius: 10, padding: "14px 16px", marginBottom: 16 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: ".06em", color: "#92400E", marginBottom: 6 }}>Temporary Password — Hand to Patient</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: "#92400E", letterSpacing: 2 }}>{visitResult.tempPassword}</div>
+              <div style={{ fontSize: 11, color: "#B45309", marginTop: 6 }}>Patient can log in using their phone number and this password. They will be prompted to change it on first login.</div>
             </div>
           )}
           <div style={S.tokenBox}>
@@ -128,7 +154,7 @@ export default function WalkInPage() {
             <button style={S.homeCard} onClick={() => setStep("lookup")}>
               <span style={S.homeIcon}>🔍</span>
               <span style={S.homeCardTitle}>Returning Patient</span>
-              <span style={S.homeCardSub}>Look up by PRN or Aadhaar</span>
+              <span style={S.homeCardSub}>Look up by PRN, Phone or Aadhaar</span>
             </button>
             <button style={{ ...S.homeCard, background: "#0C1929", borderColor: "#0C1929" }} onClick={() => setStep("new")}>
               <span style={S.homeIcon}>➕</span>
@@ -148,23 +174,23 @@ export default function WalkInPage() {
         <div style={S.card}>
           <button style={S.back} onClick={() => { setStep("home"); setLookupVal(""); }}>← Back</button>
           <h1 style={S.title}>Find Returning Patient</h1>
-
           <div style={S.tabRow}>
-            <button style={{ ...S.tab, ...(lookupMode === "prn" ? S.tabActive : {}) }} onClick={() => setLookupMode("prn")}>By PRN</button>
-            <button style={{ ...S.tab, ...(lookupMode === "aadhaar" ? S.tabActive : {}) }} onClick={() => setLookupMode("aadhaar")}>By Aadhaar</button>
+            {(["prn","phone","aadhaar"] as const).map(m => (
+              <button key={m} style={{ ...S.tab, ...(lookupMode === m ? S.tabActive : {}) }} onClick={() => setLookupMode(m)}>
+                {m === "prn" ? "By PRN" : m === "phone" ? "By Phone" : "By Aadhaar"}
+              </button>
+            ))}
           </div>
-
           <div style={S.row}>
             <input
               style={S.input}
-              placeholder={lookupMode === "prn" ? "PAT-YYYYMMDD-XXXX" : "12-digit Aadhaar number"}
+              placeholder={lookupMode === "prn" ? "PAT-YYYYMMDD-XXXX" : lookupMode === "phone" ? "10-digit phone number" : "12-digit Aadhaar number"}
               value={lookupVal}
               onChange={e => setLookupVal(e.target.value)}
               onKeyDown={e => e.key === "Enter" && lookup()}
             />
             <button style={S.btn} onClick={lookup} disabled={loading}>{loading ? "…" : "Search"}</button>
           </div>
-
           <p style={S.orText}>Patient not in system? <button style={S.linkBtn} onClick={() => setStep("new")}>Register new patient →</button></p>
         </div>
       </div>
@@ -185,7 +211,7 @@ export default function WalkInPage() {
             {patient.phone  && <div style={S.patientMeta}>Phone: {patient.phone}</div>}
             {patient.visits && patient.visits.length > 0 && (
               <div style={{ marginTop: 10 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "#888", textTransform: "uppercase", marginBottom: 6 }}>Recent Visits</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#888", textTransform: "uppercase" as const, marginBottom: 6 }}>Recent Visits</div>
                 {patient.visits.slice(0, 2).map(v => (
                   <div key={v.id} style={{ fontSize: 12, color: "#666", marginBottom: 2 }}>
                     {new Date(v.visitDate).toLocaleDateString("en-IN")} — Token {v.token} — {v.status}
@@ -193,6 +219,12 @@ export default function WalkInPage() {
                 ))}
               </div>
             )}
+          </div>
+          <div style={S.field}>
+            <label style={S.label}>Payment Type *</label>
+            <select style={S.input} value={visitPaymentType} onChange={e => setVisitPaymentType(e.target.value)}>
+              {PAYMENT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
           </div>
           <div style={S.btnRow}>
             <button style={S.btnSecondary} onClick={() => { setPatient(null); setStep("lookup"); }}>← Back</button>
@@ -209,29 +241,30 @@ export default function WalkInPage() {
       <div style={S.card}>
         <button style={S.back} onClick={() => setStep("home")}>← Back</button>
         <h1 style={S.title}>Register New Patient</h1>
+        <p style={{ fontSize: 13, color: "#888", marginBottom: 20 }}>All fields marked * are required.</p>
         <div style={S.grid2}>
-          <div style={S.field}><label style={S.label}>Full Name *</label><input style={S.input} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
-          <div style={S.field}><label style={S.label}>Date of Birth</label><input style={S.input} type="date" value={form.dateOfBirth} onChange={e => setForm(f => ({ ...f, dateOfBirth: e.target.value }))} /></div>
-          <div style={S.field}><label style={S.label}>Gender</label>
+          <div style={S.field}><label style={S.label}>Full Name *</label><input style={S.input} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Full legal name" /></div>
+          <div style={S.field}><label style={S.label}>Date of Birth *</label><input style={S.input} type="date" value={form.dateOfBirth} onChange={e => setForm(f => ({ ...f, dateOfBirth: e.target.value }))} /></div>
+          <div style={S.field}><label style={S.label}>Gender *</label>
             <select style={S.input} value={form.gender} onChange={e => setForm(f => ({ ...f, gender: e.target.value }))}>
               <option value="">Select</option><option>Male</option><option>Female</option><option>Other</option>
             </select>
           </div>
-          <div style={S.field}><label style={S.label}>Phone</label><input style={S.input} value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="10-digit" /></div>
+          <div style={S.field}><label style={S.label}>Phone *</label><input style={S.input} value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="10-digit mobile" /></div>
           <div style={{ ...S.field, gridColumn: "1 / -1" }}>
-            <label style={S.label}>Aadhaar Number <span style={{ fontWeight: 400, color: "#aaa" }}>(optional — for duplicate detection)</span></label>
+            <label style={S.label}>Aadhaar Number *</label>
             <input style={S.input} value={form.aadhaar} onChange={e => setForm(f => ({ ...f, aadhaar: e.target.value }))} placeholder="1234 5678 9012" maxLength={14} />
           </div>
           <div style={{ ...S.field, gridColumn: "1 / -1" }}><label style={S.label}>Address</label><input style={S.input} value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} /></div>
           <div style={S.field}><label style={S.label}>City</label><input style={S.input} value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} /></div>
           <div style={S.field}><label style={S.label}>Pincode</label><input style={S.input} value={form.pincode} onChange={e => setForm(f => ({ ...f, pincode: e.target.value }))} /></div>
           <div style={{ ...S.field, gridColumn: "1 / -1" }}>
-            <label style={S.label}>Chief Complaint</label>
-            <textarea style={{ ...S.input, minHeight: 72, resize: "vertical" }} value={form.healthIssues} onChange={e => setForm(f => ({ ...f, healthIssues: e.target.value }))} placeholder="Reason for visit" />
+            <label style={S.label}>Patient Reported Symptoms</label>
+            <textarea style={{ ...S.input, minHeight: 72, resize: "vertical" }} value={form.healthIssues} onChange={e => setForm(f => ({ ...f, healthIssues: e.target.value }))} placeholder="Reason for visit / presenting complaint" />
           </div>
-          <div style={S.field}><label style={S.label}>Payment Type</label>
-            <select style={S.input} value={form.paymentType} onChange={e => setForm(f => ({ ...f, paymentType: e.target.value }))}>
-              <option value="GENERAL">General</option><option value="INSURANCE">Insurance</option><option value="CASHLESS">Cashless</option>
+          <div style={S.field}><label style={S.label}>Payment Type *</label>
+            <select style={S.input} value={visitPaymentType} onChange={e => setVisitPaymentType(e.target.value)}>
+              {PAYMENT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
           <div style={S.field}><label style={S.label}>Priority</label>

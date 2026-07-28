@@ -36,7 +36,7 @@ export default function AdminDashboard() {
   const [appointments, setAppointments] = useState<FutureAppointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [cancelling, setCancelling] = useState<string | null>(null);
-  const [cancelModal, setCancelModal] = useState<QueueVisit | null>(null);
+  const [cancelModal, setCancelModal] = useState<{ id: string; token: string; patientName: string } | null>(null);
   const [cancelReason, setCancelReason] = useState("");
 
   const load = async () => {
@@ -66,11 +66,12 @@ export default function AdminDashboard() {
 
   const cancelVisit = async () => {
     if (!cancelModal) return;
+    if (!cancelReason.trim()) { toast.error("A closure note is required to cancel"); return; }
     setCancelling(cancelModal.id);
     try {
       const res = await fetch(`/api/admin/visits/${cancelModal.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: cancelReason || "Cancelled by admin" }),
+        body: JSON.stringify({ reason: cancelReason.trim() }),
       });
       if (res.ok) { toast.success("Visit cancelled"); setCancelModal(null); setCancelReason(""); await load(); }
       else { const d = await res.json(); toast.error(d.error ?? "Failed"); }
@@ -94,7 +95,7 @@ export default function AdminDashboard() {
               <div style={S.statsGrid}>
                 {[
                   { label: "Total Patients",    value: stats.totalPatients,    icon: "👥" },
-                  { label: "Approved Doctors",  value: stats.totalDoctors,     icon: "👨‍⚕️" },
+                  { label: "Panel Doctors",      value: stats.totalDoctors,     icon: "👨‍⚕️" },
                   { label: "Available Doctors", value: stats.availableDoctors, icon: "✅" },
                   { label: "Today's Visits",    value: stats.todayVisits,      icon: "📋" },
                   { label: "Waiting",           value: stats.waitingCount,     icon: "⏳" },
@@ -146,7 +147,7 @@ export default function AdminDashboard() {
                           <td style={S.td}>
                             <button
                               style={S.cancelBtn}
-                              onClick={() => { setCancelModal(v); setCancelReason(""); }}
+                              onClick={() => { setCancelModal({ id: v.id, token: v.token, patientName: v.patient.name }); setCancelReason(""); }}
                               disabled={cancelling === v.id}
                             >
                               Cancel
@@ -171,7 +172,7 @@ export default function AdminDashboard() {
                   <table style={S.table}>
                     <thead>
                       <tr>
-                        {["Token", "Patient", "PRN", "Appointment Date", "Reason", "Doctor"].map(h => (
+                        {["Token", "Patient", "PRN", "Appointment Date", "Reason", "Doctor", "Action"].map(h => (
                           <th key={h} style={S.th}>{h}</th>
                         ))}
                       </tr>
@@ -187,6 +188,15 @@ export default function AdminDashboard() {
                           </td>
                           <td style={{ ...S.td, color: "#555", fontSize: 13 }}>{a.healthIssue ?? <span style={{ color: "#ccc" }}>—</span>}</td>
                           <td style={S.td}>{a.doctor?.user.name ?? <span style={{ color: "#aaa" }}>Unassigned</span>}</td>
+                          <td style={S.td}>
+                            <button
+                              style={S.cancelBtn}
+                              onClick={() => { setCancelModal({ id: a.id, token: a.token, patientName: a.patient.name }); setCancelReason(""); }}
+                              disabled={cancelling === a.id}
+                            >
+                              Cancel
+                            </button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -202,14 +212,15 @@ export default function AdminDashboard() {
         <div style={S.modalOverlay} onClick={() => setCancelModal(null)}>
           <div style={S.modal} onClick={e => e.stopPropagation()}>
             <h3 style={S.modalTitle}>Cancel Visit</h3>
-            <p style={S.modalSub}>Cancel token <strong>{cancelModal.token}</strong> for <strong>{cancelModal.patient.name}</strong>?</p>
+            <p style={S.modalSub}>Cancel token <strong>{cancelModal.token}</strong> for <strong>{cancelModal.patientName}</strong>?</p>
             <div style={{ marginBottom: 16 }}>
-              <label style={S.fieldLabel}>Reason (optional)</label>
-              <input style={S.input} value={cancelReason} onChange={e => setCancelReason(e.target.value)} placeholder="Reason for cancellation…" />
+              <label style={S.fieldLabel}>Closure Note <span style={{ color: "#DC2626" }}>*</span></label>
+              <input style={S.input} value={cancelReason} onChange={e => setCancelReason(e.target.value)} placeholder="Reason for cancellation — shown to patient" />
+              {!cancelReason.trim() && <span style={{ fontSize: 11, color: "#DC2626", marginTop: 4, display: "block" }}>A closure note is required.</span>}
             </div>
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
               <button style={S.modalCancelBtn} onClick={() => setCancelModal(null)}>Keep Visit</button>
-              <button style={S.modalConfirmBtn} onClick={cancelVisit} disabled={!!cancelling}>
+              <button style={{ ...S.modalConfirmBtn, opacity: cancelReason.trim() ? 1 : 0.4, cursor: cancelReason.trim() ? "pointer" : "not-allowed" }} onClick={cancelVisit} disabled={!!cancelling || !cancelReason.trim()}>
                 {cancelling ? "Cancelling…" : "Yes, Cancel"}
               </button>
             </div>

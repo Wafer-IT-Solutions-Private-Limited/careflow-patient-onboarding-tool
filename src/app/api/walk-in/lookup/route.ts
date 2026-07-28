@@ -3,11 +3,11 @@ import { prisma } from "@/lib/prisma";
 import { verifyToken } from "@/lib/auth";
 import { createHash } from "crypto";
 
-function hashAadhaar(raw: string): string {
+function hashAadhaar(raw: string) {
   return createHash("sha256").update(raw.replace(/\s/g, "")).digest("hex");
 }
 
-// GET /api/walk-in/lookup?prn=...  OR  ?aadhaar=...
+// GET /api/walk-in/lookup?prn=... OR ?aadhaar=... OR ?phone=...
 export async function GET(req: NextRequest) {
   const cookie = req.cookies.get("token");
   if (!cookie) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -18,13 +18,15 @@ export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const prn     = searchParams.get("prn");
   const aadhaar = searchParams.get("aadhaar");
+  const phone   = searchParams.get("phone");
 
-  if (!prn && !aadhaar)
-    return NextResponse.json({ error: "Provide prn or aadhaar" }, { status: 400 });
+  if (!prn && !aadhaar && !phone)
+    return NextResponse.json({ error: "Provide prn, aadhaar, or phone" }, { status: 400 });
 
-  const where = prn
-    ? { prn: prn.trim().toUpperCase() }
-    : { aadhaarHash: hashAadhaar(aadhaar!) };
+  let where: Record<string, unknown>;
+  if (prn)     where = { prn: prn.trim().toUpperCase() };
+  else if (phone) where = { phone: phone.trim() };
+  else         where = { aadhaarHash: hashAadhaar(aadhaar!) };
 
   const patient = await prisma.patient.findFirst({
     where,

@@ -45,6 +45,16 @@ type EditState = {
   isVerified:  boolean;
 };
 
+type HistoryRecord = {
+  id: string;
+  visitDate: string;
+  token: string;
+  status: string;
+  cancelReason?: string;
+  doctor?: { user: { name: string } };
+  consultation?: { healthNotes?: string; prescription?: string };
+};
+
 function fmt(iso: string | null | undefined) {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
@@ -63,6 +73,9 @@ export default function AdminPatientsPage() {
   const [resetPwd,  setResetPwd]   = useState<Patient | null>(null);
   const [newPwd,    setNewPwd]     = useState("");
   const [pwdBusy,   setPwdBusy]    = useState(false);
+  const [historyPatient, setHistoryPatient] = useState<Patient | null>(null);
+  const [history,        setHistory]        = useState<HistoryRecord[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const fetchPatients = useCallback(async () => {
     setLoading(true);
@@ -91,7 +104,7 @@ export default function AdminPatientsPage() {
       state:        p.patientProfile?.state ?? "",
       pincode:      p.patientProfile?.pincode ?? "",
       healthIssues: p.patientProfile?.healthIssues ?? "",
-      paymentType:  p.patientProfile?.paymentType ?? "GENERAL",
+      paymentType:  p.patientProfile?.paymentType ?? "Cash",
       priority:     p.patientProfile?.priority ?? "NORMAL",
       isVerified:   p.isVerified,
     });
@@ -141,6 +154,20 @@ export default function AdminPatientsPage() {
       setResetPwd(null); setNewPwd("");
     } catch { toast.error("Network error"); }
     finally { setPwdBusy(false); }
+  };
+
+  const openHistory = async (p: Patient) => {
+    setHistoryPatient(p);
+    setHistory([]);
+    setHistoryLoading(true);
+    const patientProfileId = p.patientProfile?.id;
+    if (!patientProfileId) { toast.error("Patient profile not found"); setHistoryLoading(false); return; }
+    try {
+      const res = await fetch(`/api/admin/patients/${patientProfileId}/history`);
+      const data = await res.json();
+      if (res.ok) setHistory(data.history ?? []);
+      else toast.error(data.error ?? "Failed to load history");
+    } finally { setHistoryLoading(false); }
   };
 
   const filtered = patients.filter(p =>
@@ -208,7 +235,8 @@ export default function AdminPatientsPage() {
                           </span>
                         </td>
                         <td style={{ padding: "12px 14px" }}>
-                          <div style={{ display: "flex", gap: 6 }}>
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const }}>
+                            <button onClick={() => openHistory(p)} style={{ ...btn, color: "#2563EB", borderColor: "#93C5FD" }}>History</button>
                             <button onClick={() => openEdit(p)} style={btn}>Edit</button>
                             <button onClick={() => { setResetPwd(p); setNewPwd(""); }} style={{ ...btn, color: "#D97706", borderColor: "#FCD34D" }}>Reset Pwd</button>
                             <button onClick={() => setDeleting(p)} style={{ ...btn, color: "#B91C1C", borderColor: "#FCA5A5", background: "#FFF5F5" }}>Delete</button>
@@ -239,7 +267,7 @@ export default function AdminPatientsPage() {
                 { key: "city",         label: "City",          type: "text"  },
                 { key: "state",        label: "State",         type: "text"  },
                 { key: "pincode",      label: "Pincode",       type: "text"  },
-                { key: "paymentType",  label: "Payment Type",  type: "select", opts: ["GENERAL", "INSURANCE", "CASHLESS"] },
+                { key: "paymentType",  label: "Payment Type",  type: "select", opts: ["Cash", "UPI", "Net Banking", "Debit or Credit Card", "Insurance Cashless Claims"] },
                 { key: "priority",     label: "Priority",      type: "select", opts: ["NORMAL", "URGENT", "EMERGENCY"] },
               ] as { key: keyof EditState; label: string; type: string; opts?: string[] }[]).map(({ key, label, type, opts }) => (
                 <div key={key}>
@@ -283,6 +311,53 @@ export default function AdminPatientsPage() {
               <button onClick={() => { setResetPwd(null); setNewPwd(""); }} style={cancelBtn}>Cancel</button>
               <button onClick={resetPassword} disabled={pwdBusy} style={primaryBtn}>{pwdBusy ? "Resetting…" : "Reset Password"}</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Visit History Modal */}
+      {historyPatient && (
+        <div style={overlay} onClick={() => setHistoryPatient(null)}>
+          <div style={{ ...modal, maxWidth: 680 }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+              <div style={modalHdr}>Visit History — {historyPatient.name}</div>
+              <button onClick={() => setHistoryPatient(null)} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#aaa", lineHeight: 1 }}>×</button>
+            </div>
+            {historyLoading ? (
+              <div style={{ textAlign: "center", color: "#aaa", padding: "30px 0" }}>Loading history…</div>
+            ) : history.length === 0 ? (
+              <div style={{ textAlign: "center", color: "#aaa", padding: "30px 0", fontSize: 14 }}>No visit records found.</div>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid #F0EEEA" }}>
+                      {["Date", "Token", "Doctor", "Status", "Notes"].map(h => (
+                        <th key={h} style={{ ...lbl, padding: "6px 10px", textAlign: "left" }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {history.map(v => (
+                      <tr key={v.id} style={{ borderBottom: "1px solid #F8F7F5" }}>
+                        <td style={{ padding: "10px 10px", whiteSpace: "nowrap", color: "#555" }}>{fmt(v.visitDate)}</td>
+                        <td style={{ padding: "10px 10px", fontWeight: 800, color: "#0C1929" }}>{v.token}</td>
+                        <td style={{ padding: "10px 10px", color: "#555" }}>{v.doctor?.user.name ?? "—"}</td>
+                        <td style={{ padding: "10px 10px" }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 10, background: v.status === "CANCELLED" ? "#FEE2E2" : v.status === "COMPLETED" ? "#ECFDF5" : "#EFF6FF", color: v.status === "CANCELLED" ? "#DC2626" : v.status === "COMPLETED" ? "#059669" : "#2563EB" }}>
+                            {v.status}
+                          </span>
+                          {v.cancelReason && <div style={{ fontSize: 11, color: "#DC2626", marginTop: 3 }}>Note: {v.cancelReason}</div>}
+                        </td>
+                        <td style={{ padding: "10px 10px", maxWidth: 200, color: "#555" }}>
+                          {v.consultation?.healthNotes ?? v.consultation?.prescription ?? <span style={{ color: "#ccc" }}>—</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}

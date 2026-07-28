@@ -19,19 +19,13 @@ export default function HealthSetupPage() {
   const f = (field: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setForm(p => ({ ...p, [field]: e.target.value }));
 
-  const skip = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/patient/health-setup", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      if (res.ok) { router.push("/patient"); router.refresh(); }
-      else { const d = await res.json(); toast.error(d.error ?? "Failed"); }
-    } finally { setLoading(false); }
-  };
-
   const submit = async () => {
+    if (!form.bloodGroup)        { toast.error("Please select a blood group"); return; }
+    if (!form.allergies.trim())  { toast.error("Please fill in the allergies field (enter None if none)"); return; }
+    if (!form.chronicConditions.trim()) { toast.error("Please fill in chronic conditions (enter None if none)"); return; }
+    if (!form.emergencyContact.trim())  { toast.error("Emergency contact name is required"); return; }
+    if (!form.emergencyPhone.trim())    { toast.error("Emergency contact phone is required"); return; }
+
     setLoading(true);
     try {
       const res = await fetch("/api/patient/health-setup", {
@@ -52,7 +46,7 @@ export default function HealthSetupPage() {
         <div style={S.header}>
           <div style={S.step}>Step 2 of 2</div>
           <h1 style={S.title}>Health Profile Setup</h1>
-          <p style={S.sub}>Help us serve you better by sharing your baseline health information. You can update this anytime from your dashboard.</p>
+          <p style={S.sub}>All fields below are required. If a field doesn&apos;t apply, enter <strong>None</strong>.</p>
         </div>
 
         <div style={S.grid}>
@@ -60,11 +54,11 @@ export default function HealthSetupPage() {
             <label style={S.label}>Aadhaar Number <span style={S.opt}>(optional)</span></label>
             <input style={S.input} value={form.aadhaar} onChange={f("aadhaar")}
               placeholder="1234 5678 9012" maxLength={14} />
-            <span style={S.hint}>Used for duplicate detection only. Stored as a secure hash, never in plain text.</span>
+            <span style={S.hint}>Stored as a secure hash for duplicate detection only.</span>
           </div>
 
           <div style={S.field}>
-            <label style={S.label}>Blood Group</label>
+            <label style={S.label}>Blood Group <span style={S.req}>*</span></label>
             <select style={S.input} value={form.bloodGroup} onChange={f("bloodGroup")}>
               <option value="">Select blood group</option>
               {["A+","A−","B+","B−","AB+","AB−","O+","O−"].map(g => <option key={g}>{g}</option>)}
@@ -72,36 +66,33 @@ export default function HealthSetupPage() {
           </div>
 
           <div style={{ ...S.field, gridColumn: "1 / -1" }}>
-            <label style={S.label}>Known Allergies</label>
+            <label style={S.label}>Known Allergies <span style={S.req}>*</span></label>
             <textarea style={{ ...S.input, minHeight: 72, resize: "vertical" }}
               value={form.allergies} onChange={f("allergies")}
-              placeholder="e.g. Penicillin, Dust, Peanuts (or leave blank)" />
+              placeholder="e.g. Penicillin, Dust — or type None" />
           </div>
 
           <div style={{ ...S.field, gridColumn: "1 / -1" }}>
-            <label style={S.label}>Chronic Conditions</label>
+            <label style={S.label}>Chronic Conditions <span style={S.req}>*</span></label>
             <textarea style={{ ...S.input, minHeight: 72, resize: "vertical" }}
               value={form.chronicConditions} onChange={f("chronicConditions")}
-              placeholder="e.g. Diabetes Type 2, Hypertension (or leave blank)" />
+              placeholder="e.g. Diabetes Type 2, Hypertension — or type None" />
           </div>
 
           <div style={S.field}>
-            <label style={S.label}>Emergency Contact Name</label>
+            <label style={S.label}>Emergency Contact Name <span style={S.req}>*</span></label>
             <input style={S.input} value={form.emergencyContact} onChange={f("emergencyContact")}
               placeholder="Full name" />
           </div>
 
           <div style={S.field}>
-            <label style={S.label}>Emergency Contact Phone</label>
+            <label style={S.label}>Emergency Contact Phone <span style={S.req}>*</span></label>
             <input style={S.input} value={form.emergencyPhone} onChange={f("emergencyPhone")}
               placeholder="10-digit mobile" />
           </div>
         </div>
 
         <div style={S.actions}>
-          <button style={S.skipBtn} onClick={skip} disabled={loading}>
-            Skip for now
-          </button>
           <button style={S.saveBtn} onClick={submit} disabled={loading}>
             {loading ? "Saving…" : "Save & Continue"}
           </button>
@@ -115,16 +106,16 @@ const S: Record<string, React.CSSProperties> = {
   page:    { minHeight: "100vh", background: "#F5F4F2", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif" },
   card:    { background: "#fff", borderRadius: 16, padding: "36px 40px", width: "100%", maxWidth: 620, boxShadow: "0 2px 24px rgba(0,0,0,.07)" },
   header:  { marginBottom: 28 },
-  step:    { fontSize: 11, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: "#0C1929", background: "#E8EEF8", padding: "4px 10px", borderRadius: 20, display: "inline-block", marginBottom: 12 },
+  step:    { fontSize: 11, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase" as const, color: "#0C1929", background: "#E8EEF8", padding: "4px 10px", borderRadius: 20, display: "inline-block", marginBottom: 12 },
   title:   { fontSize: 24, fontWeight: 700, color: "#0C1929", marginBottom: 6 },
   sub:     { fontSize: 13.5, color: "#888", lineHeight: 1.5 },
   grid:    { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px 20px", marginBottom: 28 },
   field:   { display: "flex", flexDirection: "column", gap: 6 },
-  label:   { fontSize: 11, fontWeight: 700, letterSpacing: ".07em", textTransform: "uppercase", color: "#555" },
-  opt:     { fontWeight: 400, textTransform: "none", color: "#aaa", letterSpacing: 0 },
+  label:   { fontSize: 11, fontWeight: 700, letterSpacing: ".07em", textTransform: "uppercase" as const, color: "#555" },
+  req:     { color: "#DC2626", fontWeight: 700 },
+  opt:     { fontWeight: 400, textTransform: "none" as const, color: "#aaa", letterSpacing: 0 },
   input:   { padding: "10px 14px", border: "1.5px solid #E2E0DC", borderRadius: 9, fontSize: 14, color: "#111", background: "#FDFCFB", outline: "none", boxSizing: "border-box" as const, width: "100%" },
   hint:    { fontSize: 11, color: "#aaa", lineHeight: 1.4 },
-  actions: { display: "flex", gap: 12, justifyContent: "flex-end" },
-  skipBtn: { padding: "10px 22px", background: "transparent", color: "#555", border: "1.5px solid #D0CEC9", borderRadius: 9, fontSize: 14, fontWeight: 600, cursor: "pointer" },
+  actions: { display: "flex", justifyContent: "flex-end" },
   saveBtn: { padding: "10px 28px", background: "#0C1929", color: "#fff", border: "none", borderRadius: 9, fontSize: 14, fontWeight: 600, cursor: "pointer" },
 };

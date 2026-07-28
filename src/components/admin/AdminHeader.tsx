@@ -26,7 +26,7 @@ export default function AdminHeader() {
       <div style={S.inner}>
         <div style={S.brand}>
           <img src="/waferlogo.png" alt="Wafer" style={S.logo} />
-          <span style={S.brandName}>Admin</span>
+          <span style={S.brandName}>Hospital Admin</span>
         </div>
 
         <nav style={S.tabNav}>

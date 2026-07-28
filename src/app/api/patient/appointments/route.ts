@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     const patient = await prisma.patient.findFirst({ where: { userId: jwt.id } });
     if (!patient) return NextResponse.json({ error: "Patient profile not found" }, { status: 404 });
 
-    const { appointmentDate, healthIssue } = await req.json();
+    const { appointmentDate, healthIssue, paymentType } = await req.json();
     if (!appointmentDate) return NextResponse.json({ error: "appointmentDate is required" }, { status: 400 });
 
     const apptDate = new Date(appointmentDate);
@@ -76,7 +76,8 @@ export async function POST(req: NextRequest) {
         patientId:       patient.id,
         appointmentDate: apptDate,
         healthIssue,
-        status:          "SCHEDULED",
+        paymentType: paymentType ?? null,
+        status:      "SCHEDULED",
         priority:        patient.priority ?? "NORMAL",
         queue: {
           create: { status: "SCHEDULED", queuePosition: 0 },

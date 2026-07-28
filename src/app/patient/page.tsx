@@ -42,11 +42,14 @@ export default function PatientDashboard() {
   const [cancelConfirm, setCancelConfirm] = useState<string | null>(null);
   const [tab, setTab]             = useState<"today" | "appointments" | "history">("today");
   const [healthIssue, setHealthIssue] = useState("");
+  const [queuePayment, setQueuePayment] = useState("Cash");
+  const [adminCancelNote, setAdminCancelNote] = useState<string | null>(null);
 
   // Appointment booking form
   const [showApptForm, setShowApptForm] = useState(false);
   const [apptDate,     setApptDate]     = useState("");
   const [apptIssue,    setApptIssue]    = useState("");
+  const [apptPayment,  setApptPayment]  = useState("Cash");
   const [booking,      setBooking]      = useState(false);
 
   const patientIdRef    = useRef<string | null>(null);
@@ -78,7 +81,11 @@ export default function PatientDashboard() {
           if (event.type === "queue:updated" || event.type === "patient:called" || event.type === "visit:cancelled" || event.type === "appointment:booked") {
             loadDashboard();
             if (event.type === "patient:called") toast.success(`Your turn! Token ${event.token}`);
-            if (event.type === "visit:cancelled" && !selfCancelRef.current) toast.error("Your visit was cancelled by admin");
+            if (event.type === "visit:cancelled" && !selfCancelRef.current) {
+              const note = event.cancelReason ? ` — ${event.cancelReason}` : "";
+              toast.error(`Your appointment was cancelled by the admin${note}`, { duration: 8000 });
+              setAdminCancelNote(event.cancelReason ?? "Cancelled by admin");
+            }
           }
         } catch { /* ignore parse errors */ }
       };
@@ -99,7 +106,7 @@ export default function PatientDashboard() {
     try {
       const res = await fetch("/api/patient/join-queue", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ healthIssue: healthIssue.trim() || undefined }),
+        body: JSON.stringify({ healthIssue: healthIssue.trim() || undefined, paymentType: queuePayment }),
       });
       const d = await res.json();
       if (res.status === 409) { toast.error(d.error); return; }
@@ -132,7 +139,7 @@ export default function PatientDashboard() {
     try {
       const res = await fetch("/api/patient/appointments", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ appointmentDate: apptDate, healthIssue: apptIssue.trim() || undefined }),
+        body: JSON.stringify({ appointmentDate: apptDate, healthIssue: apptIssue.trim() || undefined, paymentType: apptPayment }),
       });
       const d = await res.json();
       if (!res.ok) { toast.error(d.error ?? "Failed to book appointment"); return; }
@@ -171,7 +178,7 @@ export default function PatientDashboard() {
         </div>
 
         <div style={S.tabs}>
-          <button style={{ ...S.tab, ...(tab === "today"        ? S.tabActive : {}) }} onClick={() => setTab("today")}>Today&apos;s Visit</button>
+          <button style={{ ...S.tab, ...(tab === "today"        ? S.tabActive : {}) }} onClick={() => setTab("today")}>Today&apos;s Appointment</button>
           <button style={{ ...S.tab, ...(tab === "appointments" ? S.tabActive : {}) }} onClick={() => setTab("appointments")}>
             Appointments {upcomingAppointments?.length > 0 && <span style={S.badge}>{upcomingAppointments.length}</span>}
           </button>
@@ -181,6 +188,16 @@ export default function PatientDashboard() {
         {/* ── Today tab ─────────────────────────────────────────────────── */}
         {tab === "today" && (
           <div>
+            {adminCancelNote && (
+              <div style={{ background: "#FEF2F2", border: "1.5px solid #FECACA", borderRadius: 12, padding: "14px 18px", marginBottom: 20, display: "flex", alignItems: "flex-start", gap: 12 }}>
+                <span style={{ fontSize: 18, lineHeight: 1 }}>ℹ️</span>
+                <div>
+                  <div style={{ fontWeight: 700, color: "#B91C1C", fontSize: 14, marginBottom: 2 }}>Your appointment was cancelled by the admin</div>
+                  <div style={{ color: "#7F1D1D", fontSize: 13 }}>{adminCancelNote}</div>
+                </div>
+                <button onClick={() => setAdminCancelNote(null)} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "#B91C1C", fontSize: 18, lineHeight: 1 }}>×</button>
+              </div>
+            )}
             {todayVisit ? (
               <div style={S.visitCard}>
                 <div style={S.visitHeader}>
@@ -224,7 +241,7 @@ export default function PatientDashboard() {
                 <div style={S.emptyText}>No visit registered for today.</div>
                 <div style={S.emptySubText}>Join the walk-in queue or book a future appointment.</div>
                 <div style={{ maxWidth: 400, margin: "0 auto 16px" }}>
-                  <label style={{ ...S.fieldLabel, textAlign: "left", display: "block", marginBottom: 6 }}>Chief Complaint <span style={{ color: "#aaa", fontWeight: 400 }}>(optional)</span></label>
+                  <label style={{ ...S.fieldLabel, textAlign: "left", display: "block", marginBottom: 6 }}>Patient Reported Symptoms <span style={{ color: "#aaa", fontWeight: 400 }}>(optional)</span></label>
                   <textarea
                     style={{ ...S.textarea, marginBottom: 12 }}
                     placeholder="Describe your symptoms or reason for visit…"
@@ -232,6 +249,10 @@ export default function PatientDashboard() {
                     onChange={e => setHealthIssue(e.target.value)}
                     rows={2}
                   />
+                  <label style={{ ...S.fieldLabel, textAlign: "left", display: "block", marginBottom: 6, marginTop: 8 }}>Payment Type</label>
+                  <select style={{ ...S.input, marginBottom: 12 }} value={queuePayment} onChange={e => setQueuePayment(e.target.value)}>
+                    {["Cash","UPI","Net Banking","Debit or Credit Card","Insurance Cashless Claims"].map(o => <option key={o}>{o}</option>)}
+                  </select>
                 </div>
                 <button style={S.joinBtn} onClick={joinQueue} disabled={joining}>
                   {joining ? "Joining…" : "Join Today's Queue"}
@@ -261,6 +282,12 @@ export default function PatientDashboard() {
                   <div>
                     <label style={S.fieldLabel}>Reason / Health Issue <span style={{ color: "#aaa", fontWeight: 400 }}>(optional)</span></label>
                     <input style={S.input} value={apptIssue} onChange={e => setApptIssue(e.target.value)} placeholder="e.g. Follow-up, Fever…" />
+                  </div>
+                  <div>
+                    <label style={S.fieldLabel}>Payment Type</label>
+                    <select style={S.input} value={apptPayment} onChange={e => setApptPayment(e.target.value)}>
+                      {["Cash","UPI","Net Banking","Debit or Credit Card","Insurance Cashless Claims"].map(o => <option key={o}>{o}</option>)}
+                    </select>
                   </div>
                 </div>
                 <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
