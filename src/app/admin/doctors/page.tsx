@@ -34,6 +34,9 @@ export default function AdminDoctorsPage() {
   const [newPwd,    setNewPwd]    = useState("");
   const [pwdBusy,   setPwdBusy]  = useState(false);
 
+  const [confirmDel, setConfirmDel] = useState<Doctor | null>(null);
+  const [deleting,   setDeleting]   = useState(false);
+
   const logout = async () => { await fetch("/api/auth/logout", { method: "POST" }); router.push("/login"); };
 
   const load = () =>
@@ -104,9 +107,12 @@ export default function AdminDoctorsPage() {
     else toast.error("Failed to update");
   };
 
-  const deleteDoctor = async (doc: Doctor) => {
-    if (!confirm(`Delete Dr. ${doc.user.name}? This cannot be undone.`)) return;
-    const res = await fetch(`/api/admin/doctors/${doc.id}`, { method: "DELETE" });
+  const deleteDoctor = async () => {
+    if (!confirmDel) return;
+    setDeleting(true);
+    const res = await fetch(`/api/admin/doctors/${confirmDel.id}`, { method: "DELETE" });
+    setDeleting(false);
+    setConfirmDel(null);
     if (res.ok) { toast.success("Doctor removed"); load(); }
     else toast.error("Failed to delete");
   };
@@ -189,7 +195,7 @@ export default function AdminDoctorsPage() {
                         <button style={{ ...S.actBtn, color: doc.approved ? "#D97706" : "#059669" }} onClick={() => toggleApproval(doc)}>
                           {doc.approved ? "Suspend" : "Approve"}
                         </button>
-                        <button style={{ ...S.actBtn, color: "#DC2626" }} onClick={() => deleteDoctor(doc)}>Delete</button>
+                        <button style={{ ...S.actBtn, color: "#DC2626" }} onClick={() => setConfirmDel(doc)}>Delete</button>
                       </div>
                     </td>
                   </tr>
@@ -246,6 +252,25 @@ export default function AdminDoctorsPage() {
             <div style={{ display: "flex", gap: 10 }}>
               <button onClick={() => { setResetPwd(null); setNewPwd(""); }} style={cancelBtn}>Cancel</button>
               <button onClick={resetPassword} disabled={pwdBusy} style={primaryBtn}>{pwdBusy ? "Resetting…" : "Reset Password"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {confirmDel && (
+        <div style={overlay}>
+          <div style={{ ...modal, maxWidth: 360 }}>
+            <div style={modalHdr}>Delete Doctor</div>
+            <p style={{ fontSize: 14, color: "#555", marginBottom: 20 }}>
+              Are you sure you want to delete <strong>{confirmDel.user.name}</strong>? This action cannot be undone.
+            </p>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => setConfirmDel(null)} style={cancelBtn} disabled={deleting}>Cancel</button>
+              <button onClick={deleteDoctor} disabled={deleting}
+                style={{ ...primaryBtn, background: "#DC2626" }}>
+                {deleting ? "Deleting…" : "Delete"}
+              </button>
             </div>
           </div>
         </div>
