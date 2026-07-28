@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="public/waferlogo.png" alt="MeFy Logo" width="80" />
+<img src="public/waferlogo.png" alt="CareFlow Logo" width="80" />
 
-# MeFy — Hospital Management System
+# CareFlow — Hospital Management System
 
 **A modern, full-stack patient onboarding and clinic management platform built for real-world hospital workflows.**
 
@@ -18,7 +18,7 @@
 
 ## Overview
 
-MeFy streamlines end-to-end patient management — from first-time walk-in registration to consultation completion. It supports three distinct roles (**Admin / Doctor / Patient**), a live queue system with real-time updates, appointment scheduling, and voice-powered clinical notes — all in a clean, responsive interface.
+CareFlow streamlines end-to-end patient management — from first-time walk-in registration to consultation completion. It supports three distinct roles (**Admin / Doctor / Patient**), a live queue system with real-time updates, appointment scheduling, and voice-powered clinical notes — all in a clean, responsive interface.
 
 ---
 

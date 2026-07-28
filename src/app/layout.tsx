@@ -3,7 +3,7 @@ import { Toaster } from "react-hot-toast";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "MeFy — Hospital Management System",
+  title: "CareFlow — Hospital Management System",
   description: "Role-based hospital management platform for doctors, patients, and admins",
 };
 
