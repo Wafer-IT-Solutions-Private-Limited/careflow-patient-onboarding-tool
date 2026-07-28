@@ -333,7 +333,7 @@ export default function AdminPatientsPage() {
                   <thead>
                     <tr style={{ borderBottom: "1px solid #F0EEEA" }}>
                       {["Date", "Token", "Doctor", "Status", "Notes"].map(h => (
-                        <th key={h} style={{ ...lbl, padding: "6px 10px", textAlign: "left" }}>{h}</th>
+                        <th key={h} style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: ".06em", color: "#999", padding: "8px 10px", textAlign: "left" as const, borderBottom: "1px solid #F0EEEA" }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
