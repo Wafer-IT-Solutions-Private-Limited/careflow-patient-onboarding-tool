@@ -7,7 +7,6 @@ const nextConfig: NextConfig = {
     "@prisma/driver-adapter-utils",
     "pg",
   ],
-  turbopack: {},
 };
 
 export default nextConfig;
