@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, lazy, Suspense } from "react";
 import toast from "react-hot-toast";
+
+const AadhaarScanner = lazy(() => import("@/components/AadhaarScanner"));
 
 type Step = "home" | "lookup" | "new" | "confirm";
 
@@ -26,6 +28,8 @@ export default function WalkInPage() {
   const [loading, setLoading]       = useState(false);
   const [visitResult, setVisitResult] = useState<{ token: string; visitId: string; doctorName?: string; prn?: string; tempPassword?: string } | null>(null);
   const [visitPaymentType, setVisitPaymentType] = useState("Cash");
+
+  const [showScanner, setShowScanner] = useState(false);
 
   const [form, setForm] = useState({
     name: "", dateOfBirth: "", gender: "", phone: "", aadhaar: "",
@@ -244,8 +248,13 @@ export default function WalkInPage() {
     <div style={S.page}>
       <div className="wi-card" style={S.card}>
         <button style={S.back} onClick={() => setStep("home")}>← Back</button>
-        <h1 style={S.title}>Register New Patient</h1>
-        <p style={{ fontSize: 13, color: "#888", marginBottom: 20 }}>All fields marked * are required.</p>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
+          <h1 style={{ ...S.title, marginBottom: 0 }}>Register New Patient</h1>
+          <button style={S.scanBtn} onClick={() => setShowScanner(true)}>
+            📷 Scan Aadhaar
+          </button>
+        </div>
+        <p style={{ fontSize: 13, color: "#888", marginBottom: 20 }}>All fields marked * are required. Use Scan Aadhaar to auto-fill.</p>
         <div className="wi-grid2" style={S.grid2}>
           <div style={S.field}><label style={S.label}>Full Name *</label><input style={S.input} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Full legal name" /></div>
           <div style={S.field}><label style={S.label}>Date of Birth *</label><input style={S.input} type="date" value={form.dateOfBirth} onChange={e => setForm(f => ({ ...f, dateOfBirth: e.target.value }))} /></div>
@@ -282,6 +291,27 @@ export default function WalkInPage() {
           <button style={S.btn} onClick={createNewPatient} disabled={loading}>{loading ? "Registering…" : "Register & Add to Queue"}</button>
         </div>
       </div>
+      {/* Aadhaar scanner modal — lazy-loaded, only mounts when opened */}
+      {showScanner && (
+        <Suspense fallback={null}>
+          <AadhaarScanner
+            onComplete={fields => {
+              setForm(f => ({
+                ...f,
+                name:        fields.name        ?? f.name,
+                dateOfBirth: fields.dateOfBirth  ?? f.dateOfBirth,
+                gender:      fields.gender       ?? f.gender,
+                address:     fields.address      ?? f.address,
+                city:        fields.city         ?? f.city,
+                state:       fields.state        ?? f.state,
+                pincode:     fields.pincode      ?? f.pincode,
+              }));
+              toast.success("Aadhaar details applied — please review and fill in any missing fields.");
+            }}
+            onClose={() => setShowScanner(false)}
+          />
+        </Suspense>
+      )}
       <WalkInStyles />
     </div>
   );
@@ -307,6 +337,7 @@ const S: Record<string, React.CSSProperties> = {
   title:        { fontSize: 24, fontWeight: 700, color: "#0C1929", marginBottom: 6 },
   sub:          { fontSize: 13.5, color: "#888", marginBottom: 28 },
   back:         { background: "none", border: "none", fontSize: 13, color: "#666", cursor: "pointer", padding: "0 0 16px", fontWeight: 600 },
+  scanBtn:      { display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", background: "#0C1929", color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" as const },
   homeGrid:     { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 8 },
   homeCard:     { background: "#F8F7F5", border: "1.5px solid #E2E0DC", borderRadius: 14, padding: "28px 20px", cursor: "pointer", textAlign: "center" as const, display: "flex", flexDirection: "column" as const, alignItems: "center", gap: 8 },
   homeIcon:     { fontSize: 28, marginBottom: 4 },
