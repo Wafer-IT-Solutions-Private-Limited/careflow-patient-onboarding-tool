@@ -1,15 +1,15 @@
-import { inflate } from "pako";
+import { inflate, ungzip } from "pako";
 
 export interface AadhaarQRData {
   name?:        string;
   dob?:         string;
   gender?:      string;
-  co?:          string;   // care-of (father / husband name)
+  co?:          string;
   house?:       string;
   street?:      string;
   landmark?:    string;
   locality?:    string;
-  vtc?:         string;   // village / town / city
+  vtc?:         string;
   subDistrict?: string;
   district?:    string;
   state?:       string;
@@ -28,7 +28,7 @@ function decimalToBytes(decimal: string): Uint8Array {
   return new Uint8Array(bytes);
 }
 
-// ── Extract an XML attribute value ───────────────────────────────────────────
+// ── XML attribute helper ─────────────────────────────────────────────────────
 function attr(xml: string, name: string): string | undefined {
   const m = xml.match(new RegExp(`\\b${name}="([^"]*)"`));
   return m ? m[1].trim() || undefined : undefined;
@@ -36,10 +36,8 @@ function attr(xml: string, name: string): string | undefined {
 
 // ── Parse both flat and nested Aadhaar XML formats ──────────────────────────
 function parseXML(xml: string): AadhaarQRData {
-  // Nested format: <Poi ...> and <Poa ...> child elements
   const poiMatch = xml.match(/<Poi([^/]*)\/>/i);
   const poaMatch = xml.match(/<Poa([^/]*)\/>/i);
-
   const poiStr = poiMatch ? poiMatch[1] : xml;
   const poaStr = poaMatch ? poaMatch[1] : xml;
 
@@ -61,33 +59,86 @@ function parseXML(xml: string): AadhaarQRData {
   };
 }
 
-// ── Decode Aadhaar Secure QR (BigInt → zlib → XML) ──────────────────────────
+// ── Parse binary 0xFF-delimited Aadhaar QR format ───────────────────────────
+// Field order confirmed from real card: [0]=type [1]=ref-id [2]=name [3]=dob
+// [4]=gender [5]=? [6]=district [7]=? [8]=address [9]=locality
+// [10]=pincode [11]=? [12]=state [13]=? [14]=? [15]=city/vtc
+function parseDelimited(raw: Uint8Array): AadhaarQRData {
+  const fields: string[] = [];
+  const dec = new TextDecoder("utf-8", { fatal: false });
+  let start = 0;
+  for (let i = 0; i < raw.length; i++) {
+    if (raw[i] === 0xFF) {
+      fields.push(dec.decode(raw.slice(start, i)));
+      start = i + 1;
+    }
+  }
+  if (start < raw.length) fields.push(dec.decode(raw.slice(start)));
+
+  const f = (i: number) => fields[i]?.trim() || undefined;
+
+  return {
+    name:     f(2),
+    dob:      f(3),
+    gender:   f(4),
+    district: f(6),
+    house:    f(8),
+    locality: f(9),
+    pincode:  f(10),
+    state:    f(12),
+    vtc:      f(15),
+  };
+}
+
+// ── Decompress QR bytes (gzip or zlib) ──────────────────────────────────────
+function decompress(bytes: Uint8Array): Uint8Array {
+  if (bytes[0] === 0x1F && bytes[1] === 0x8B) return ungzip(bytes);
+  return inflate(bytes);
+}
+
+// ── Decode Aadhaar Secure QR: decimal → bytes → decompress → parse ───────────
 function decodeSecureQR(decimal: string): AadhaarQRData | null {
-  const bytes   = decimalToBytes(decimal);
-  const version = bytes[0];
+  const bytes = decimalToBytes(decimal);
+  if (bytes.length < 10) return null;
 
-  // RSA-2048 signature = last 256 bytes; ECDSA (v2) = last 32 bytes
-  const sigLen  = version === 2 ? 32 : 256;
-  if (bytes.length <= sigLen + 1) return null;
+  let raw: Uint8Array;
 
-  const compressed = bytes.slice(1, bytes.length - sigLen);
-  const xml = new TextDecoder("utf-8").decode(inflate(compressed));
-  return parseXML(xml);
+  if (bytes[0] === 0x1F && bytes[1] === 0x8B) {
+    // Entire byte array is a raw gzip stream (most common real-card format)
+    raw = ungzip(bytes);
+  } else if (bytes[0] === 0x78) {
+    // Raw zlib stream
+    raw = inflate(bytes);
+  } else if (bytes[0] === 2) {
+    // Secure QR V2: version byte 2 + payload + 32-byte ECDSA signature
+    const inner = bytes.slice(1, bytes.length - 32);
+    raw = decompress(inner);
+  } else {
+    // Secure QR V1: version byte + payload + 256-byte RSA signature
+    const inner = bytes.slice(1, bytes.length - 256);
+    if (inner.length < 4) return null;
+    raw = decompress(inner);
+  }
+
+  // Check if decompressed content is XML
+  const prefix = new TextDecoder("utf-8", { fatal: false }).decode(raw.slice(0, 5));
+  if (prefix.trimStart().startsWith("<")) {
+    return parseXML(new TextDecoder("utf-8").decode(raw));
+  }
+
+  // Binary 0xFF-delimited format
+  return parseDelimited(raw);
 }
 
 // ── Public decode entry point ────────────────────────────────────────────────
 export function decodeAadhaarQR(qrString: string): AadhaarQRData | null {
   try {
-    // Primary: Secure QR — a large decimal number (>100 digits)
     if (/^\d+$/.test(qrString) && qrString.length > 100) {
       return decodeSecureQR(qrString);
     }
-
-    // Fallback: plain XML QR (older / manually generated cards)
     if (qrString.trim().startsWith("<")) {
       return parseXML(qrString);
     }
-
     return null;
   } catch {
     return null;

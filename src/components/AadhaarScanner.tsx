@@ -99,6 +99,8 @@ export default function AadhaarScanner({ onComplete, onClose }: Props) {
   const rafRef     = useRef<number>(0);
   const stableRef  = useRef(0);   // consecutive "ready" frames
   const ocrFront   = useRef<Partial<AadhaarFormFields>>({});
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const zxingRef   = useRef<((d: ImageData) => Promise<{ text: string }[]>) | null>(null);
 
   const [phase,       setPhase]       = useState<Phase>("qr");
   const [quality,     setQuality]     = useState<Quality>({ brightness: "ok", ready: false });
@@ -158,12 +160,18 @@ export default function AadhaarScanner({ onComplete, onClose }: Props) {
     // Draw overlay (no quality check in QR mode)
     drawOverlay(overlay, w, h, false, false);
 
-    // QR scan with jsQR (loaded dynamically to keep initial bundle lean)
-    import("jsqr").then(({ default: jsQR }) => {
-      const img  = ctx.getImageData(0, 0, w, h);
-      const code = jsQR(img.data, img.width, img.height, { inversionAttempts: "dontInvert" });
-      if (code?.data) {
-        const decoded = decodeAadhaarQR(code.data);
+    // QR decode with zxing-wasm (handles dense Aadhaar Secure QR codes)
+    const runScan = async () => {
+      if (!zxingRef.current) {
+        const { readBarcodesFromImageData } = await import("zxing-wasm/reader");
+        zxingRef.current = (imageData: ImageData) =>
+          readBarcodesFromImageData(imageData, { formats: ["QRCode"], tryHarder: true });
+      }
+      const img     = ctx.getImageData(0, 0, w, h);
+      const results = await zxingRef.current(img);
+      const text    = results[0]?.text;
+      if (text) {
+        const decoded = decodeAadhaarQR(text);
         if (decoded) {
           stopCamera();
           drawOverlay(overlay, w, h, true, false);
@@ -173,7 +181,8 @@ export default function AadhaarScanner({ onComplete, onClose }: Props) {
         }
       }
       rafRef.current = requestAnimationFrame(scanLoop);
-    });
+    };
+    runScan().catch(() => { rafRef.current = requestAnimationFrame(scanLoop); });
   }, [stopCamera]);
 
   // ── OCR quality + auto-capture loop ─────────────────────────────────────────
