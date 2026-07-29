@@ -298,13 +298,14 @@ export default function WalkInPage() {
             onComplete={fields => {
               setForm(f => ({
                 ...f,
-                name:        fields.name        ?? f.name,
-                dateOfBirth: fields.dateOfBirth  ?? f.dateOfBirth,
-                gender:      fields.gender       ?? f.gender,
-                address:     fields.address      ?? f.address,
-                city:        fields.city         ?? f.city,
-                state:       fields.state        ?? f.state,
-                pincode:     fields.pincode      ?? f.pincode,
+                name:        fields.name          ?? f.name,
+                dateOfBirth: fields.dateOfBirth    ?? f.dateOfBirth,
+                gender:      fields.gender         ?? f.gender,
+                address:     fields.address        ?? f.address,
+                city:        fields.city           ?? f.city,
+                state:       fields.state          ?? f.state,
+                pincode:     fields.pincode        ?? f.pincode,
+                aadhaar:     fields.aadhaarNumber  ?? f.aadhaar,
               }));
               toast.success("Aadhaar details applied — please review and fill in any missing fields.");
             }}
