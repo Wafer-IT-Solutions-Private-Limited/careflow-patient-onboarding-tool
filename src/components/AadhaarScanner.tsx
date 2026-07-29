@@ -1,18 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { decodeAadhaarQR }              from "@/lib/aadhaar/qr-decoder";
-import { mapQRToForm, mergeOCRFields }  from "@/lib/aadhaar/field-mapper";
-import type { AadhaarFormFields }       from "@/lib/aadhaar/field-mapper";
-import { assessFrameQuality }           from "@/lib/aadhaar/ocr-processor";
-import type { FrameQuality }            from "@/lib/aadhaar/ocr-processor";
+import { decodeAadhaarQR }     from "@/lib/aadhaar/qr-decoder";
+import { mapQRToForm }         from "@/lib/aadhaar/field-mapper";
+import type { AadhaarFormFields } from "@/lib/aadhaar/field-mapper";
 
-type Phase = "qr" | "ocr-front" | "ocr-back" | "processing" | "confirm";
+type Phase = "camera" | "preview" | "processing" | "confirm" | "retry";
 
-interface Props {
-  onComplete: (fields: AadhaarFormFields) => void;
-  onClose:    () => void;
-}
+interface RetryInfo { reason: string; suggestion: string; }
+interface Props { onComplete: (fields: AadhaarFormFields) => void; onClose: () => void; }
 
 // ── Card guide (ISO/IEC 7810 ID-1 landscape) ─────────────────────────────────
 const CARD_RATIO  = 1.586;
@@ -21,59 +17,32 @@ const CARD_MARGIN = 0.06;
 function cardRect(w: number, h: number) {
   const cw = w * (1 - 2 * CARD_MARGIN);
   const ch = cw / CARD_RATIO;
-  const cx = w * CARD_MARGIN;
-  const cy = (h - ch) / 2;
-  return { cx, cy, cw, ch };
+  return { cx: w * CARD_MARGIN, cy: (h - ch) / 2, cw, ch };
 }
 
-// ── Overlay canvas ─────────────────────────────────────────────────────────────
-type OverlayMood = "neutral" | "warn" | "ready" | "success";
-
-function drawOverlay(
-  canvas: HTMLCanvasElement,
-  w: number, h: number,
-  mood: OverlayMood,
-) {
+function drawGuide(canvas: HTMLCanvasElement, w: number, h: number) {
   const ctx = canvas.getContext("2d")!;
   ctx.clearRect(0, 0, w, h);
   const { cx, cy, cw, ch } = cardRect(w, h);
 
-  // Dark vignette outside card
   ctx.fillStyle = "rgba(0,0,0,0.55)";
   ctx.fillRect(0, 0, w, h);
   ctx.clearRect(cx, cy, cw, ch);
 
-  const cl    = Math.min(cw, ch) * 0.13;
-  const lw    = 3.5;
-  const color = mood === "success" ? "#22C55E"
-              : mood === "ready"   ? "#86EFAC"
-              : mood === "warn"    ? "#F59E0B"
-              : "#FFFFFF";
-
-  ctx.strokeStyle = color;
-  ctx.lineWidth   = lw;
+  const cl = Math.min(cw, ch) * 0.13;
+  ctx.strokeStyle = "#FFFFFF";
+  ctx.lineWidth   = 3.5;
   ctx.lineCap     = "round";
 
-  const corners: [number, number, number, number, number, number][] = [
-    [cx,        cy + cl,  cx,       cy,       cx + cl,  cy      ],
-    [cx+cw-cl,  cy,       cx+cw,    cy,       cx+cw,    cy+cl   ],
-    [cx,        cy+ch-cl, cx,       cy+ch,    cx+cl,    cy+ch   ],
-    [cx+cw-cl,  cy+ch,    cx+cw,    cy+ch,    cx+cw,    cy+ch-cl],
-  ];
-  for (const [x1,y1,x2,y2,x3,y3] of corners) {
+  for (const [x1, y1, x2, y2, x3, y3] of [
+    [cx,        cy + cl,  cx,      cy,      cx + cl,      cy      ],
+    [cx+cw-cl,  cy,       cx+cw,   cy,      cx+cw,        cy+cl   ],
+    [cx,        cy+ch-cl, cx,      cy+ch,   cx+cl,        cy+ch   ],
+    [cx+cw-cl,  cy+ch,    cx+cw,   cy+ch,   cx+cw,        cy+ch-cl],
+  ] as [number,number,number,number,number,number][]) {
     ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.lineTo(x3,y3); ctx.stroke();
   }
 }
-
-// ── Display quality state (extends FrameQuality with UI message) ──────────────
-interface DisplayQuality extends FrameQuality {
-  statusMsg: string; // context-aware message shown to user
-}
-
-const INIT_QUALITY: DisplayQuality = {
-  brightness: "ok", blur: "ok", ready: false,
-  level: "warn", message: "", statusMsg: "Starting camera…",
-};
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function AadhaarScanner({ onComplete, onClose }: Props) {
@@ -81,262 +50,154 @@ export default function AadhaarScanner({ onComplete, onClose }: Props) {
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const captureRef = useRef<HTMLCanvasElement>(null);
   const streamRef  = useRef<MediaStream | null>(null);
-  const rafRef     = useRef<number>(0);
-  const stableRef  = useRef(0);
-  const ocrFront   = useRef<Partial<AadhaarFormFields>>({});
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const zxingRef    = useRef<((d: ImageData) => Promise<{ text: string }[]>) | null>(null);
-  const killedRef   = useRef(false);  // stop zombie RAF callbacks
-  const scanningRef = useRef(false);  // prevent concurrent ZXing calls
 
-  const [phase,           setPhase]          = useState<Phase>("qr");
-  const [quality,         setQuality]        = useState<DisplayQuality>(INIT_QUALITY);
+  const [phase,           setPhase]          = useState<Phase>("camera");
   const [fields,          setFields]         = useState<AadhaarFormFields>({});
-  const [processing,      setProcessing]     = useState(false);
-  const [camError,        setCamError]       = useState<string | null>(null);
-  const [qrFailed,        setQRFailed]       = useState(false);
   const [aadhaarVerified, setAadhaarVerified] = useState<boolean | null>(null);
+  const [camError,        setCamError]       = useState<string | null>(null);
+  const [capturedURL,     setCapturedURL]    = useState<string | null>(null);
+  const [retryInfo,       setRetryInfo]      = useState<RetryInfo | null>(null);
 
-  // ── Camera lifecycle ─────────────────────────────────────────────────────────
+  // ── Camera lifecycle ──────────────────────────────────────────────────────
   const stopCamera = useCallback(() => {
-    cancelAnimationFrame(rafRef.current);
     streamRef.current?.getTracks().forEach(t => t.stop());
     streamRef.current = null;
   }, []);
 
   const startCamera = useCallback(async () => {
-    killedRef.current  = false;
-    scanningRef.current = false;
     setCamError(null);
-    stableRef.current = 0;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } },
       });
       streamRef.current = stream;
-      const v = videoRef.current!;
-      v.srcObject = stream;
-      await v.play();
+      videoRef.current!.srcObject = stream;
+      await videoRef.current!.play();
     } catch {
       setCamError("Camera access denied. Please allow camera permission and try again.");
     }
   }, []);
 
+  useEffect(() => { startCamera(); return () => stopCamera(); }, [startCamera, stopCamera]);
+
+  // ── Draw framing guide (RAF loop, camera phase only) ─────────────────────
   useEffect(() => {
-    startCamera();
-    return () => stopCamera();
-  }, [startCamera, stopCamera]);
-
-  // ── Shared: draw frame + compute quality ────────────────────────────────────
-  function drawFrame(): { w: number; h: number; ctx: CanvasRenderingContext2D; rect: ReturnType<typeof cardRect> } | null {
-    const video   = videoRef.current;
-    const overlay = overlayRef.current;
-    const capture = captureRef.current;
-    if (!video || !overlay || !capture || video.readyState < 2) return null;
-
-    const w = video.videoWidth, h = video.videoHeight;
-    overlay.width = capture.width  = w;
-    overlay.height = capture.height = h;
-
-    const ctx = capture.getContext("2d", { willReadFrequently: true })!;
-    ctx.drawImage(video, 0, 0, w, h);
-    return { w, h, ctx, rect: cardRect(w, h) };
-  }
-
-  // ── QR scan loop ─────────────────────────────────────────────────────────────
-  const scanLoop = useCallback(() => {
-    if (killedRef.current) return;
-
-    const frame = drawFrame();
-    if (!frame) { rafRef.current = requestAnimationFrame(scanLoop); return; }
-    const { w, h, ctx, rect: { cx, cy, cw, ch } } = frame;
-
-    // Quality check every frame — drives corner color + status message
-    const q = assessFrameQuality(ctx, cx, cy, cw, ch);
-    const mood: OverlayMood = q.level === "good" ? "ready" : q.level === "warn" ? "warn" : "neutral";
-    drawOverlay(overlayRef.current!, w, h, mood);
-    setQuality({ ...q, statusMsg: q.ready ? "Scanning for QR code…" : q.message });
-
-    // Gate ZXing: only run when quality is ok and no decode in flight
-    if (!q.ready || scanningRef.current) {
-      rafRef.current = requestAnimationFrame(scanLoop);
-      return;
-    }
-
-    scanningRef.current = true;
-    const imgData = ctx.getImageData(0, 0, w, h);
-
-    (async () => {
-      try {
-        if (!zxingRef.current) {
-          const { readBarcodesFromImageData } = await import("zxing-wasm/reader");
-          zxingRef.current = (d: ImageData) =>
-            readBarcodesFromImageData(d, { formats: ["QRCode"], tryHarder: true });
-        }
-        const results = await zxingRef.current(imgData);
-        const text    = results[0]?.text;
-
-        if (text && !killedRef.current) {
-          const decoded = decodeAadhaarQR(text);
-          if (decoded && !killedRef.current) {
-            killedRef.current = true;
-            stopCamera();
-            drawOverlay(overlayRef.current!, w, h, "success");
-            setPhase("processing");
-            setProcessing(true);
-
-            try {
-              const { ocrAadhaarNumber } = await import("@/lib/aadhaar/ocr-processor");
-              const aaRes = await ocrAadhaarNumber(captureRef.current!, { cx, cy, cw, ch });
-              setAadhaarVerified(aaRes.verified);
-              setFields({ ...mapQRToForm(decoded), aadhaarNumber: aaRes.number ?? undefined });
-            } catch {
-              setFields(mapQRToForm(decoded));
-            } finally {
-              setProcessing(false);
-              setPhase("confirm");
-            }
-            return;
-          }
-        }
-      } finally {
-        if (!killedRef.current) scanningRef.current = false;
+    if (phase !== "camera") return;
+    let raf: number;
+    const loop = () => {
+      const v = videoRef.current, o = overlayRef.current;
+      if (v && o && v.readyState >= 2 && v.videoWidth) {
+        o.width = v.videoWidth; o.height = v.videoHeight;
+        drawGuide(o, v.videoWidth, v.videoHeight);
       }
-      if (!killedRef.current) rafRef.current = requestAnimationFrame(scanLoop);
-    })();
-  }, [stopCamera]); // eslint-disable-line react-hooks/exhaustive-deps
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [phase]);
 
-  // ── OCR quality + auto-capture loop ─────────────────────────────────────────
-  const ocrLoop = useCallback((side: "front" | "back") => {
-    if (killedRef.current) return;
+  // ── Capture ──────────────────────────────────────────────────────────────
+  const capturePhoto = useCallback(() => {
+    const v = videoRef.current, c = captureRef.current;
+    if (!v || !c || v.readyState < 2) return;
+    c.width = v.videoWidth; c.height = v.videoHeight;
+    c.getContext("2d", { willReadFrequently: true })!.drawImage(v, 0, 0, c.width, c.height);
+    stopCamera();
+    setCapturedURL(c.toDataURL("image/jpeg", 0.92));
+    setPhase("preview");
+  }, [stopCamera]);
 
-    const frame = drawFrame();
-    if (!frame) { rafRef.current = requestAnimationFrame(() => ocrLoop(side)); return; }
-    const { w, h, ctx, rect: { cx, cy, cw, ch } } = frame;
+  // ── Analyse ───────────────────────────────────────────────────────────────
+  const analysePhoto = useCallback(async () => {
+    setPhase("processing");
+    const c = captureRef.current;
+    if (!c) return;
 
+    const ctx = c.getContext("2d", { willReadFrequently: true })!;
+    const { cx, cy, cw, ch } = cardRect(c.width, c.height);
+
+    const { assessFrameQuality, ocrAadhaarNumber } = await import("@/lib/aadhaar/ocr-processor");
     const q = assessFrameQuality(ctx, cx, cy, cw, ch);
 
-    if (q.ready) {
-      stableRef.current++;
-    } else {
-      stableRef.current = 0;
-    }
-
-    const stable = stableRef.current;
-
-    // Build countdown message when quality is good
-    let statusMsg = q.message;
-    if (q.ready) {
-      if (stable >= 38)      statusMsg = "Capturing…";
-      else if (stable >= 15) statusMsg = `Hold steady — capturing in ${Math.ceil((45 - stable) / 30)}s`;
-      else                   statusMsg = "Good — hold steady…";
-    }
-
-    const mood: OverlayMood = q.level === "good" && stable > 5 ? "ready"
-                            : q.level === "warn"                ? "warn"
-                            : "neutral";
-    drawOverlay(overlayRef.current!, w, h, mood);
-    setQuality({ ...q, statusMsg });
-
-    if (stable >= 45) {
-      stableRef.current = 0;
-      captureFrame(side);
+    if (!q.ready) {
+      setRetryInfo({
+        reason: q.brightness === "low"  ? "Image too dark"
+               : q.brightness === "high" ? "Too much glare"
+               : "Image is blurry",
+        suggestion: q.brightness === "low"
+          ? "Move to a brighter area or turn on a light."
+          : q.brightness === "high"
+          ? "Tilt the card slightly to avoid direct light reflections."
+          : "Hold the phone very still and wait for the camera to focus before tapping Capture.",
+      });
+      setPhase("retry");
       return;
     }
-
-    rafRef.current = requestAnimationFrame(() => ocrLoop(side));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Start right loop when phase changes ─────────────────────────────────────
-  useEffect(() => {
-    cancelAnimationFrame(rafRef.current);
-    stableRef.current = 0;
-    setQuality(INIT_QUALITY);
-
-    if (phase === "qr") {
-      killedRef.current = false;
-      scanningRef.current = false;
-      rafRef.current = requestAnimationFrame(scanLoop);
-    } else if (phase === "ocr-front") {
-      rafRef.current = requestAnimationFrame(() => ocrLoop("front"));
-    } else if (phase === "ocr-back") {
-      rafRef.current = requestAnimationFrame(() => ocrLoop("back"));
-    }
-  }, [phase, scanLoop, ocrLoop]);
-
-  // ── Capture frame → run OCR ───────────────────────────────────────────────
-  const captureFrame = useCallback(async (side: "front" | "back") => {
-    cancelAnimationFrame(rafRef.current);
-    setPhase("processing");
-    setProcessing(true);
 
     try {
-      const { runOCR } = await import("@/lib/aadhaar/ocr-processor");
-      const extracted  = await runOCR(captureRef.current!, side);
-
-      if (side === "front") {
-        ocrFront.current = extracted;
-        await startCamera();
-        setPhase("ocr-back");
-      } else {
-        const merged = mergeOCRFields(ocrFront.current, extracted);
-        stopCamera();
-        setFields(merged);
-        setAadhaarVerified(merged.aadhaarNumber ? null : null); // needs manual check
-        setPhase("confirm");
+      const { readBarcodesFromImageData } = await import("zxing-wasm/reader");
+      const results = await readBarcodesFromImageData(
+        ctx.getImageData(0, 0, c.width, c.height),
+        { formats: ["QRCode"], tryHarder: true },
+      );
+      const text = results[0]?.text;
+      if (text) {
+        const decoded = decodeAadhaarQR(text);
+        if (decoded) {
+          const aaRes = await ocrAadhaarNumber(c, { cx, cy, cw, ch });
+          setAadhaarVerified(aaRes.verified);
+          setFields({ ...mapQRToForm(decoded), aadhaarNumber: aaRes.number ?? undefined });
+          setPhase("confirm");
+          return;
+        }
       }
-    } catch {
-      setPhase(side === "front" ? "ocr-front" : "ocr-back");
-    } finally {
-      setProcessing(false);
-    }
-  }, [startCamera, stopCamera]);
+    } catch { /* treat as not found */ }
 
-  // ── Switch to OCR fallback ───────────────────────────────────────────────
-  const switchToOCR = useCallback(() => {
-    cancelAnimationFrame(rafRef.current);
-    killedRef.current = true; // kill qr scan loop
-    setQRFailed(true);
-    setPhase("ocr-front");
+    setRetryInfo({
+      reason: "QR code not detected",
+      suggestion: "Make sure the full back of the card is in frame and the QR code is not covered or damaged. Try better lighting.",
+    });
+    setPhase("retry");
   }, []);
+
+  // ── Retake ────────────────────────────────────────────────────────────────
+  const retake = useCallback(async () => {
+    setRetryInfo(null);
+    setCapturedURL(null);
+    await startCamera();
+    setPhase("camera");
+  }, [startCamera]);
 
   const setField = (k: keyof AadhaarFormFields) => (v: string) =>
     setFields(f => ({ ...f, [k]: v }));
 
-  // ── Render ─────────────────────────────────────────────────────────────────
-  const isOCRPhase = phase === "ocr-front" || phase === "ocr-back";
-
-  return (
-    <div style={S.backdrop}>
-      {/* ── Confirm screen ── */}
-      {phase === "confirm" ? (
+  // ── Confirm screen ────────────────────────────────────────────────────────
+  if (phase === "confirm") {
+    return (
+      <div style={S.backdrop}>
+        <style>{`@keyframes spin{to{transform:rotate(360deg)}} @media(max-width:500px){.acgrid{grid-template-columns:1fr!important}}`}</style>
         <div style={S.confirmCard}>
           <div style={S.confirmHeader}>
             <span style={S.confirmTitle}>Review Extracted Details</span>
-            <button style={S.closeBtn} onClick={onClose}>✕</button>
+            <button style={S.xBtn} onClick={onClose}>✕</button>
           </div>
-          <p style={S.confirmSub}>
-            {qrFailed
-              ? "OCR results — verify carefully before applying."
-              : "QR decoded — confirm details and apply."}
-          </p>
+          <p style={S.confirmSub}>QR decoded — confirm details and apply.</p>
 
-          <div style={S.confirmGrid}>
-            {(
-              [
-                ["Full Name",    "name",         "text"],
-                ["Date of Birth","dateOfBirth",   "date"],
-                ["Gender",       "gender",        "select"],
-                ["Address",      "address",       "text"],
-                ["City / VTC",   "city",          "text"],
-                ["State",        "state",         "text"],
-                ["Pincode",      "pincode",       "text"],
-              ] as [string, keyof AadhaarFormFields, string][]
-            ).map(([label, key, type]) => (
-              <div key={key} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <div className="acgrid" style={S.confirmGrid}>
+            {([
+              ["Full Name",     "name",        "text"],
+              ["Date of Birth", "dateOfBirth", "date"],
+              ["Gender",        "gender",      "select"],
+              ["Address",       "address",     "text"],
+              ["City / VTC",    "city",        "text"],
+              ["State",         "state",       "text"],
+              ["Pincode",       "pincode",     "text"],
+            ] as [string, keyof AadhaarFormFields, string][]).map(([label, key, type]) => (
+              <div key={key} style={{ display:"flex", flexDirection:"column", gap:4 }}>
                 <label style={S.fLabel}>{label}</label>
                 {type === "select" ? (
-                  <select style={S.fInput} value={fields[key] ?? ""} onChange={e => setField(key)(e.target.value)}>
+                  <select style={S.fInput} value={fields[key] ?? ""}
+                    onChange={e => setField(key)(e.target.value)}>
                     <option value="">Select</option>
                     <option>Male</option><option>Female</option><option>Other</option>
                   </select>
@@ -347,21 +208,15 @@ export default function AadhaarScanner({ onComplete, onClose }: Props) {
               </div>
             ))}
 
-            {/* Aadhaar number — full width with verification badge */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 4, gridColumn: "1 / -1" }}>
+            <div style={{ display:"flex", flexDirection:"column", gap:4, gridColumn:"1 / -1" }}>
               <label style={S.fLabel}>
                 Aadhaar Number
                 {aadhaarVerified === true  && <span style={S.verifiedBadge}>✓ Verified</span>}
                 {aadhaarVerified === false && <span style={S.unverifiedBadge}>⚠ Unverified — check manually</span>}
               </label>
-              <input
-                style={S.fInput}
-                type="text"
-                value={fields.aadhaarNumber ?? ""}
+              <input style={S.fInput} type="text" value={fields.aadhaarNumber ?? ""}
                 onChange={e => setField("aadhaarNumber")(e.target.value)}
-                placeholder="xxxx xxxx xxxx"
-                maxLength={14}
-              />
+                placeholder="xxxx xxxx xxxx" maxLength={14} />
             </div>
           </div>
 
@@ -372,112 +227,79 @@ export default function AadhaarScanner({ onComplete, onClose }: Props) {
             </button>
           </div>
         </div>
-      ) : (
-        /* ── Camera screen ── */
-        <div style={S.camWrap}>
-          <video ref={videoRef} style={S.video} playsInline muted autoPlay />
-          <canvas ref={overlayRef} style={S.overlay} />
-          <canvas ref={captureRef} style={{ display: "none" }} />
+      </div>
+    );
+  }
 
-          {/* Top bar */}
-          <div style={S.topBar}>
-            <div>
-              <span style={S.phaseChip}>
-                {phase === "ocr-front" ? "STEP 2a OF 3"
-                  : phase === "ocr-back" ? "STEP 2b OF 3"
-                  : "STEP 1 OF 3"}
-              </span>
-              <span style={S.phaseLabel}>
-                {phase === "ocr-front" ? "Show the FRONT of the Aadhaar card"
-                  : phase === "ocr-back" ? "Flip the card — show the BACK now"
-                  : phase === "processing" ? "Reading card details…"
-                  : "Point the back of the Aadhaar card at the camera"}
-              </span>
-            </div>
-            <button style={S.closeBtn} onClick={() => { stopCamera(); onClose(); }}>✕</button>
+  // ── Camera / Preview / Processing / Retry ─────────────────────────────────
+  return (
+    <div style={S.backdrop}>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+
+      {/* ── Camera (always in DOM so refs stay attached) ── */}
+      <div style={{ ...S.camWrap, display: phase === "camera" ? "flex" : "none" }}>
+        <video ref={videoRef} style={S.video} playsInline muted autoPlay />
+        <canvas ref={overlayRef} style={S.overlay} />
+        <canvas ref={captureRef} style={{ display: "none" }} />
+
+        <div style={S.topBar}>
+          <div>
+            <span style={S.phaseChip}>AADHAAR SCAN</span>
+            <span style={S.phaseLabel}>Point the BACK of the Aadhaar card at the camera</span>
           </div>
+          <button style={S.xBtn} onClick={() => { stopCamera(); onClose(); }}>✕</button>
+        </div>
 
-          {/* Camera error */}
-          {camError && <div style={S.errorBanner}>{camError}</div>}
+        {camError && <div style={S.errorBanner}>{camError}</div>}
 
-          {/* Processing overlay */}
-          {processing && (
-            <div style={S.processingBanner}>
-              <div style={S.spinner} />
-              Reading card details…
+        <div style={S.bottomBar}>
+          <p style={S.bottomHint}>Align the full card · Good lighting · Hold steady</p>
+          <button style={S.shutterBtn} onClick={capturePhoto} aria-label="Capture photo">
+            <span style={S.shutterInner} />
+          </button>
+          <p style={{ ...S.bottomHint, fontSize: 11, opacity: 0.55 }}>Tap to capture</p>
+        </div>
+      </div>
+
+      {/* ── Preview ── */}
+      {phase === "preview" && capturedURL && (
+        <div style={S.fullScreen}>
+          <div style={S.screenTop}>
+            <span style={S.screenTitle}>Check the photo</span>
+            <button style={S.xBtn} onClick={() => { stopCamera(); onClose(); }}>✕</button>
+          </div>
+          <img src={capturedURL} alt="Captured card" style={S.capturedImg} />
+          <div style={S.screenBottom}>
+            <p style={S.hintWhite}>Is the full card visible? Is text and QR code sharp?</p>
+            <div style={S.rowBtns}>
+              <button style={S.retakeBtn} onClick={retake}>↩ Retake</button>
+              <button style={S.primaryBtn} onClick={analysePhoto}>Analyse →</button>
             </div>
-          )}
+          </div>
+        </div>
+      )}
 
-          {/* ── Quality bar — shown in ALL camera phases ── */}
-          {!processing && !camError && (
-            <div style={S.qualityBar}>
+      {/* ── Processing ── */}
+      {phase === "processing" && (
+        <div style={S.fullScreen}>
+          {capturedURL && <img src={capturedURL} alt="" style={{ ...S.capturedImg, opacity: 0.25 }} />}
+          <div style={S.centreBox}>
+            <div style={S.spinner} />
+            <span style={S.boxTitle}>Analysing image…</span>
+            <span style={S.boxHint}>Checking quality · Reading QR code</span>
+          </div>
+        </div>
+      )}
 
-              {/* OCR phase: two pill indicators + status */}
-              {isOCRPhase ? (
-                <div style={S.qualityPanel}>
-                  <div style={S.qualityPills}>
-                    <span style={{
-                      ...S.qualityPill,
-                      background: quality.brightness === "ok" ? "#166534" : quality.brightness === "high" ? "#92400E" : "#991B1B",
-                      border:     `1px solid ${quality.brightness === "ok" ? "#22C55E" : quality.brightness === "high" ? "#F59E0B" : "#EF4444"}`,
-                    }}>
-                      <span style={pillDot(quality.brightness === "ok" ? "#22C55E" : "#EF4444")} />
-                      💡 {quality.brightness === "ok" ? "Light OK" : quality.brightness === "low" ? "Too Dark" : "Too Bright"}
-                    </span>
-                    <span style={{
-                      ...S.qualityPill,
-                      background: quality.blur === "ok" ? "#166534" : "#92400E",
-                      border:     `1px solid ${quality.blur === "ok" ? "#22C55E" : "#F59E0B"}`,
-                    }}>
-                      <span style={pillDot(quality.blur === "ok" ? "#22C55E" : "#F59E0B")} />
-                      🔍 {quality.blur === "ok" ? "Sharp" : "Blurry"}
-                    </span>
-                  </div>
-                  <p style={{
-                    ...S.statusMsg,
-                    color: quality.level === "good" ? "#86EFAC" : quality.level === "warn" ? "#FCD34D" : "#FCA5A5",
-                  }}>
-                    {quality.statusMsg}
-                  </p>
-                </div>
-              ) : (
-                /* QR phase: single status line */
-                <div style={S.qrStatus}>
-                  <span style={{ ...S.qrDot, background: quality.level === "good" ? "#22C55E" : quality.level === "warn" ? "#F59E0B" : "#EF4444" }} />
-                  <span style={{ color: quality.level === "good" ? "#86EFAC" : quality.level === "warn" ? "#FCD34D" : "#FCA5A5", fontSize: 13 }}>
-                    {quality.statusMsg || "Initializing…"}
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Bottom bar */}
-          <div style={S.bottomBar}>
-            {phase === "qr" && !processing && (
-              <>
-                <p style={S.bottomHint}>Align the back of the card in the frame — QR auto-detects</p>
-                <button style={S.fallbackBtn} onClick={switchToOCR}>
-                  QR damaged or unreadable? Switch to manual scan →
-                </button>
-              </>
-            )}
-
-            {isOCRPhase && !processing && (
-              <>
-                <p style={S.bottomHint}>
-                  {phase === "ocr-front"
-                    ? "Align the FRONT of the card — name, DOB and gender will be captured"
-                    : "Align the BACK — address, pincode and Aadhaar number will be captured"}
-                </p>
-                <button
-                  style={{ ...S.captureBtn, opacity: quality.ready ? 1 : 0.45 }}
-                  onClick={() => captureFrame(phase === "ocr-front" ? "front" : "back")}
-                >
-                  📷 Capture Now
-                </button>
-              </>
-            )}
+      {/* ── Retry ── */}
+      {phase === "retry" && retryInfo && (
+        <div style={S.fullScreen}>
+          {capturedURL && <img src={capturedURL} alt="" style={{ ...S.capturedImg, opacity: 0.25 }} />}
+          <div style={S.centreBox}>
+            <div style={S.retryIcon}>✕</div>
+            <span style={S.boxTitle}>{retryInfo.reason}</span>
+            <span style={S.boxHint}>{retryInfo.suggestion}</span>
+            <button style={{ ...S.primaryBtn, marginTop: 4 }} onClick={retake}>📷 Try Again</button>
           </div>
         </div>
       )}
@@ -485,46 +307,46 @@ export default function AadhaarScanner({ onComplete, onClose }: Props) {
   );
 }
 
-// ── Styles ─────────────────────────────────────────────────────────────────────
-function pillDot(color: string): React.CSSProperties {
-  return { display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: color, marginRight: 5, flexShrink: 0 };
-}
-
+// ── Styles ────────────────────────────────────────────────────────────────────
 const S: Record<string, React.CSSProperties> = {
-  backdrop:    { position: "fixed", inset: 0, zIndex: 1000, background: "#000", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif" },
-  camWrap:     { position: "relative", width: "100%", height: "100%", overflow: "hidden" },
-  video:       { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" },
-  overlay:     { position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" },
+  backdrop:     { position: "fixed", inset: 0, zIndex: 1000, background: "#000", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif" },
 
-  topBar:      { position: "absolute", top: 0, left: 0, right: 0, padding: "16px 20px", display: "flex", alignItems: "flex-start", justifyContent: "space-between", background: "linear-gradient(to bottom, rgba(0,0,0,.78), transparent)" },
-  phaseChip:   { display: "inline-block", fontSize: 10, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase" as const, color: "#fff", background: "rgba(255,255,255,.18)", borderRadius: 20, padding: "3px 10px", marginBottom: 4 },
-  phaseLabel:  { display: "block", fontSize: 14, fontWeight: 600, color: "#fff" },
-  closeBtn:    { background: "rgba(0,0,0,.45)", border: "none", color: "#fff", width: 34, height: 34, borderRadius: "50%", fontSize: 15, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
-
-  errorBanner:      { position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", background: "#FEF2F2", border: "1.5px solid #FCA5A5", borderRadius: 12, padding: "16px 24px", fontSize: 14, color: "#DC2626", textAlign: "center" as const, maxWidth: 320 },
-  processingBanner: { position: "absolute", inset: 0, display: "flex", flexDirection: "column" as const, alignItems: "center", justifyContent: "center", gap: 16, background: "rgba(0,0,0,.72)", color: "#fff", fontSize: 15, fontWeight: 600 },
-  spinner:          { width: 36, height: 36, border: "3px solid rgba(255,255,255,.2)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.8s linear infinite" },
-
-  // Quality bar (sits above bottom bar)
-  qualityBar:   { position: "absolute", bottom: 140, left: 0, right: 0, display: "flex", justifyContent: "center", padding: "0 20px" },
-
-  // OCR phase quality panel
-  qualityPanel: { background: "rgba(0,0,0,.65)", borderRadius: 14, padding: "12px 18px", display: "flex", flexDirection: "column" as const, alignItems: "center", gap: 8, minWidth: 260 },
-  qualityPills: { display: "flex", gap: 10 },
-  qualityPill:  { display: "flex", alignItems: "center", fontSize: 12, fontWeight: 600, color: "#fff", borderRadius: 20, padding: "5px 12px" },
-  statusMsg:    { fontSize: 13, fontWeight: 600, margin: 0, textAlign: "center" as const },
-
-  // QR phase status
-  qrStatus:     { background: "rgba(0,0,0,.55)", borderRadius: 20, padding: "7px 16px", display: "flex", alignItems: "center", gap: 8 },
-  qrDot:        { width: 8, height: 8, borderRadius: "50%", flexShrink: 0 },
-
-  bottomBar:    { position: "absolute", bottom: 0, left: 0, right: 0, padding: "20px 24px 36px", background: "linear-gradient(to top, rgba(0,0,0,.8), transparent)", display: "flex", flexDirection: "column" as const, alignItems: "center", gap: 12 },
+  // Camera
+  camWrap:      { position: "relative", width: "100%", height: "100%", flexDirection: "column", overflow: "hidden" },
+  video:        { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" },
+  overlay:      { position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" },
+  topBar:       { position: "absolute", top: 0, left: 0, right: 0, padding: "16px 20px", display: "flex", alignItems: "flex-start", justifyContent: "space-between", background: "linear-gradient(to bottom,rgba(0,0,0,.78),transparent)" },
+  phaseChip:    { display: "inline-block", fontSize: 10, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase" as const, color: "#fff", background: "rgba(255,255,255,.18)", borderRadius: 20, padding: "3px 10px", marginBottom: 4 },
+  phaseLabel:   { display: "block", fontSize: 14, fontWeight: 600, color: "#fff" },
+  xBtn:         { background: "rgba(0,0,0,.45)", border: "none", color: "#fff", width: 34, height: 34, borderRadius: "50%", fontSize: 15, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  errorBanner:  { position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", background: "#FEF2F2", border: "1.5px solid #FCA5A5", borderRadius: 12, padding: "16px 24px", fontSize: 14, color: "#DC2626", textAlign: "center" as const, maxWidth: 300, zIndex: 2 },
+  bottomBar:    { position: "absolute", bottom: 0, left: 0, right: 0, padding: "24px 24px 52px", background: "linear-gradient(to top,rgba(0,0,0,.82),transparent)", display: "flex", flexDirection: "column" as const, alignItems: "center", gap: 14 },
   bottomHint:   { color: "rgba(255,255,255,.75)", fontSize: 13, textAlign: "center" as const, margin: 0 },
-  captureBtn:   { background: "#fff", color: "#0C1929", border: "none", borderRadius: 40, padding: "13px 40px", fontSize: 15, fontWeight: 700, cursor: "pointer", transition: "opacity .2s" },
-  fallbackBtn:  { background: "none", border: "none", color: "rgba(255,255,255,.55)", fontSize: 12, cursor: "pointer", textDecoration: "underline" },
+  shutterBtn:   { width: 78, height: 78, borderRadius: "50%", border: "4px solid rgba(255,255,255,.85)", background: "rgba(255,255,255,.15)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 },
+  shutterInner: { display: "block", width: 60, height: 60, borderRadius: "50%", background: "#fff" },
+
+  // Shared fullscreen
+  fullScreen:   { position: "relative", width: "100%", height: "100%", display: "flex", flexDirection: "column" as const, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  capturedImg:  { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain" as const },
+
+  // Preview overlays
+  screenTop:    { position: "absolute", top: 0, left: 0, right: 0, padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", background: "linear-gradient(to bottom,rgba(0,0,0,.82),transparent)", zIndex: 2 },
+  screenTitle:  { fontSize: 16, fontWeight: 700, color: "#fff" },
+  screenBottom: { position: "absolute", bottom: 0, left: 0, right: 0, padding: "24px 24px 52px", background: "linear-gradient(to top,rgba(0,0,0,.9),transparent)", display: "flex", flexDirection: "column" as const, alignItems: "center", gap: 16, zIndex: 2 },
+  hintWhite:    { color: "rgba(255,255,255,.8)", fontSize: 13, textAlign: "center" as const, margin: 0 },
+  rowBtns:      { display: "flex", gap: 12, width: "100%", maxWidth: 320 },
+  retakeBtn:    { flex: 1, padding: "13px 0", border: "2px solid rgba(255,255,255,.65)", background: "rgba(255,255,255,.1)", color: "#fff", borderRadius: 40, fontSize: 14, fontWeight: 700, cursor: "pointer" },
+  primaryBtn:   { flex: 1, padding: "13px 0", border: "none", background: "#fff", color: "#0C1929", borderRadius: 40, fontSize: 14, fontWeight: 700, cursor: "pointer" },
+
+  // Centre box (processing / retry)
+  centreBox:    { position: "relative", zIndex: 2, display: "flex", flexDirection: "column" as const, alignItems: "center", gap: 14, padding: "32px 28px", background: "rgba(0,0,0,.75)", borderRadius: 20, maxWidth: 320, textAlign: "center" as const, margin: 16 },
+  spinner:      { width: 44, height: 44, border: "3px solid rgba(255,255,255,.2)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.8s linear infinite" },
+  boxTitle:     { fontSize: 17, fontWeight: 700, color: "#fff" },
+  boxHint:      { fontSize: 13, color: "rgba(255,255,255,.7)", lineHeight: 1.5 },
+  retryIcon:    { width: 54, height: 54, borderRadius: "50%", background: "#DC2626", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: "#fff", fontWeight: 800, flexShrink: 0 },
 
   // Confirm card
-  confirmCard:    { background: "#fff", borderRadius: 20, width: "100%", maxWidth: 580, maxHeight: "92vh", overflowY: "auto" as const, padding: "28px 32px", boxShadow: "0 24px 80px rgba(0,0,0,.35)" },
+  confirmCard:    { background: "#fff", borderRadius: 20, width: "100%", maxWidth: 580, maxHeight: "92vh", overflowY: "auto" as const, padding: "28px 32px", boxShadow: "0 24px 80px rgba(0,0,0,.35)", margin: 16 },
   confirmHeader:  { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 },
   confirmTitle:   { fontSize: 18, fontWeight: 700, color: "#0C1929" },
   confirmSub:     { fontSize: 13, color: "#888", marginBottom: 20 },
