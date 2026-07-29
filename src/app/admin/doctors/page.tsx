@@ -189,7 +189,7 @@ export default function AdminDoctorsPage() {
                       </span>
                     </td>
                     <td data-label="Actions" style={S.td}>
-                      <div style={S.actBtns}>
+                      <div className="adoc-act-btns" style={S.actBtns}>
                         <button style={{ ...S.actBtn, color: "#2563EB" }} onClick={() => openEdit(doc)}>Edit</button>
                         <button style={{ ...S.actBtn, color: "#D97706" }} onClick={() => { setResetPwd(doc); setNewPwd(""); }}>Reset Pwd</button>
                         <button style={{ ...S.actBtn, color: doc.approved ? "#D97706" : "#059669" }} onClick={() => toggleApproval(doc)}>
@@ -278,8 +278,9 @@ export default function AdminDoctorsPage() {
 
       <style>{`
         @media (max-width: 639px) {
-          .adoc-main { padding: 20px 14px !important; }
-          .adoc-top  { flex-direction: column !important; align-items: flex-start !important; gap: 12px !important; }
+          .adoc-main  { padding: 16px 14px !important; }
+          .adoc-top   { flex-direction: column !important; align-items: stretch !important; gap: 10px !important; }
+          .adoc-top button { width: 100% !important; }
           .adoc-grid2 { grid-template-columns: 1fr !important; }
           .adoc-table-wrap { overflow-x: visible !important; }
           .adoc-table thead { display: none; }
@@ -313,11 +314,13 @@ export default function AdminDoctorsPage() {
             flex-shrink: 0;
             padding-top: 2px;
           }
+          .adoc-act-btns { flex-direction: column !important; gap: 6px !important; }
           .adoc-modal-grid { grid-template-columns: 1fr !important; }
         }
         @media (min-width: 640px) and (max-width: 1023px) {
-          .adoc-main { padding: 24px 18px !important; }
+          .adoc-main  { padding: 20px 18px !important; }
           .adoc-grid2 { grid-template-columns: 1fr 1fr !important; }
+          .adoc-modal-grid { grid-template-columns: 1fr 1fr !important; }
         }
       `}</style>
     </div>

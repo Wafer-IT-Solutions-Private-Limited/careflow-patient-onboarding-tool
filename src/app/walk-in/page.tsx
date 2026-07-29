@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, lazy, Suspense } from "react";
+import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 
 const AadhaarScanner = lazy(() => import("@/components/AadhaarScanner"));
@@ -21,6 +22,7 @@ const PAYMENT_OPTIONS = [
 ];
 
 export default function WalkInPage() {
+  const router = useRouter();
   const [step, setStep]             = useState<Step>("home");
   const [lookupMode, setLookupMode] = useState<"prn" | "aadhaar" | "phone">("prn");
   const [lookupVal, setLookupVal]   = useState("");
@@ -141,7 +143,10 @@ export default function WalkInPage() {
           </div>
           <div style={S.infoRow}><span style={S.infoLabel}>Visit ID</span><span style={S.infoVal}>{visitResult.visitId}</span></div>
           {visitResult.doctorName && <div style={S.infoRow}><span style={S.infoLabel}>Assigned Doctor</span><span style={S.infoVal}>{visitResult.doctorName}</span></div>}
-          <button style={S.btn} onClick={reset}>Register Another Patient</button>
+          <div style={{ display: "flex", gap: 12, marginTop: 4 }}>
+            <button style={S.btnSecondary} onClick={() => router.push("/admin")}>← Dashboard</button>
+            <button style={S.btn} onClick={reset}>Register Another</button>
+          </div>
         </div>
         <WalkInStyles />
       </div>
@@ -287,6 +292,7 @@ export default function WalkInPage() {
           </div>
         </div>
         <div className="wi-btn-row" style={S.btnRow}>
+          <button style={S.btnSecondary} onClick={() => router.push("/admin")}>← Dashboard</button>
           <button style={S.btnSecondary} onClick={() => setStep("home")}>← Back</button>
           <button style={S.btn} onClick={createNewPatient} disabled={loading}>{loading ? "Registering…" : "Register & Add to Queue"}</button>
         </div>

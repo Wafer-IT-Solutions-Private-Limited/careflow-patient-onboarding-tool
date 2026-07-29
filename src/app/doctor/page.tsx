@@ -242,7 +242,7 @@ export default function DoctorDashboard() {
   return (
     <div style={S.page}>
       <header style={S.header}>
-        <div style={S.headerInner}>
+        <div className="dr-header-inner" style={S.headerInner}>
           <div style={S.brand}>
             <img src="/waferlogo.png" alt="Wafer" style={S.logo} />
             <div>
@@ -250,7 +250,7 @@ export default function DoctorDashboard() {
               <div style={S.doctorSpec}>{doctor.specialization}</div>
             </div>
           </div>
-          <div style={S.headerRight}>
+          <div className="dr-header-right" style={S.headerRight}>
             <div className="dr-avail-row" style={S.availRow}>
               {(["AVAILABLE", "ENGAGED", "OFFLINE"] as Availability[]).map(a => (
                 <button
@@ -463,13 +463,17 @@ export default function DoctorDashboard() {
 
       <style>{`
         @media (max-width: 639px) {
-          .dr-main       { padding: 16px 12px !important; }
-          .dr-stats      { grid-template-columns: 1fr !important; gap: 8px !important; }
-          .dr-grid       { grid-template-columns: 1fr !important; }
-          .dr-avail-row  { gap: 3px !important; }
-          .dr-avail-row button { padding: 4px 7px !important; font-size: 10px !important; }
+          .dr-header-inner { height: auto !important; flex-wrap: wrap !important; padding: 10px 14px !important; gap: 10px !important; }
+          .dr-header-right { width: 100% !important; justify-content: space-between !important; }
+          .dr-main         { padding: 16px 12px !important; }
+          .dr-stats        { grid-template-columns: repeat(3, 1fr) !important; gap: 8px !important; }
+          .dr-grid         { grid-template-columns: 1fr !important; }
+          .dr-avail-row    { gap: 4px !important; flex: 1; }
+          .dr-avail-row button { padding: 5px 8px !important; font-size: 10px !important; flex: 1; }
         }
         @media (min-width: 640px) and (max-width: 1023px) {
+          .dr-header-inner { height: auto !important; flex-wrap: wrap !important; padding: 10px 18px !important; gap: 10px !important; }
+          .dr-header-right { width: 100% !important; justify-content: space-between !important; }
           .dr-main  { padding: 20px 18px !important; }
           .dr-grid  { grid-template-columns: 1fr !important; }
           .dr-stats { grid-template-columns: repeat(3, 1fr) !important; }

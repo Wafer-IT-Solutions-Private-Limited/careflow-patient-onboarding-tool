@@ -185,7 +185,7 @@ export default function AdminPatientsPage() {
           <div style={{ fontSize: 13, color: "#888" }}>View, edit and manage registered patients</div>
         </div>
         <div>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, gap: 12, flexWrap: "wrap" }}>
+          <div className="apm-search-row" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, gap: 12, flexWrap: "wrap" }}>
             <input
               value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Search by name, email or PRN…"
@@ -233,7 +233,7 @@ export default function AdminPatientsPage() {
                           </span>
                         </td>
                         <td data-label="Actions" style={{ padding: "12px 14px" }}>
-                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const }}>
+                          <div className="apm-action-btns" style={{ display: "flex", gap: 6, flexWrap: "wrap" as const }}>
                             <button onClick={() => openHistory(p)} style={{ ...btn, color: "#2563EB", borderColor: "#93C5FD" }}>History</button>
                             <button onClick={() => openEdit(p)} style={btn}>Edit</button>
                             <button onClick={() => { setResetPwd(p); setNewPwd(""); }} style={{ ...btn, color: "#D97706", borderColor: "#FCD34D" }}>Reset Pwd</button>
@@ -379,7 +379,9 @@ export default function AdminPatientsPage() {
 
       <style>{`
         @media (max-width: 639px) {
-          .apm-main { padding: 20px 14px !important; }
+          .apm-main { padding: 16px 14px !important; }
+          .apm-search-row { flex-direction: column !important; align-items: stretch !important; }
+          .apm-search-row input { max-width: 100% !important; }
           .apm-table-wrap { overflow-x: visible !important; }
           .apm-table thead { display: none; }
           .apm-table tbody tr {
@@ -411,10 +413,12 @@ export default function AdminPatientsPage() {
             flex-shrink: 0;
             padding-top: 2px;
           }
-          .apm-modal-grid { grid-template-columns: 1fr !important; }
+          .apm-action-btns { flex-direction: column !important; gap: 4px !important; }
+          .apm-modal-grid  { grid-template-columns: 1fr !important; }
         }
         @media (min-width: 640px) and (max-width: 1023px) {
-          .apm-main { padding: 24px 18px !important; }
+          .apm-main { padding: 20px 18px !important; }
+          .apm-modal-grid { grid-template-columns: 1fr 1fr !important; }
         }
       `}</style>
     </div>

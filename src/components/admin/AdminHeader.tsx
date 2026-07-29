@@ -67,11 +67,11 @@ export default function AdminHeader() {
 
       <style>{`
         .ah-header { background: #0C1929; position: sticky; top: 0; z-index: 50; }
-        .ah-inner  { max-width: 1280px; margin: 0 auto; height: 60px; display: flex; align-items: center; gap: 16px; padding: 0 20px; }
+        .ah-inner  { max-width: 1280px; margin: 0 auto; height: 60px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 20px; }
         .ah-brand  { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
         .ah-logo   { height: 28px; filter: brightness(0) invert(1); }
         .ah-name   { font-size: 15px; font-weight: 700; color: #fff; }
-        .ah-nav    { display: flex; gap: 2px; flex: 1; justify-content: center; }
+        .ah-nav    { display: flex; gap: 2px; }
         .ah-tab    { padding: 7px 16px; background: transparent; color: rgba(255,255,255,.6); border: none; border-radius: 8px; font-size: 13.5px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: all .15s; font-family: inherit; }
         .ah-tab:hover { color: #fff; background: rgba(255,255,255,.08); }
         .ah-active { background: rgba(255,255,255,.12) !important; color: #fff !important; }
@@ -84,7 +84,7 @@ export default function AdminHeader() {
         .ah-mobile-tab:hover { background: rgba(255,255,255,.07); color: #fff; }
         .ah-mobile-active { background: rgba(255,255,255,.12) !important; color: #fff !important; }
         .ah-mobile-out { color: rgba(255,90,90,.8); margin-top: 6px; border-top: 1px solid rgba(255,255,255,.08); padding-top: 14px; }
-        @media (max-width: 767px) {
+        @media (max-width: 1023px) {
           .ah-nav     { display: none; }
           .ah-signout { display: none; }
           .ah-burger  { display: flex; }

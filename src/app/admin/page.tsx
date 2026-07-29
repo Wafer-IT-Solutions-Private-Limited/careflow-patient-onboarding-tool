@@ -111,7 +111,7 @@ export default function AdminDashboard() {
               </div>
             )}
 
-            <div style={S.actionRow}>
+            <div className="ad-action" style={S.actionRow}>
               <button style={S.actionBtn} onClick={() => router.push("/walk-in")}>+ Register Walk-In Patient</button>
             </div>
 
@@ -230,8 +230,10 @@ export default function AdminDashboard() {
 
       <style>{`
         @media (max-width: 639px) {
-          .ad-main { padding: 20px 14px !important; }
-          .ad-stats { grid-template-columns: repeat(2, 1fr) !important; }
+          .ad-main   { padding: 16px 14px !important; }
+          .ad-stats  { grid-template-columns: repeat(2, 1fr) !important; gap: 8px !important; }
+          .ad-action { width: 100% !important; }
+          .ad-action button { width: 100% !important; text-align: center; }
           .ad-table-wrap { overflow-x: visible !important; }
           .ad-table thead { display: none; }
           .ad-table tbody tr {

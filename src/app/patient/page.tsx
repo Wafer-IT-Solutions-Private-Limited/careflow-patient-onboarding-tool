@@ -159,13 +159,13 @@ export default function PatientDashboard() {
   return (
     <div style={S.page}>
       <header style={S.header}>
-        <div style={S.headerInner}>
+        <div className="pp-header-inner" style={S.headerInner}>
           <div style={S.brand}>
             <img src="/waferlogo.png" alt="Wafer" style={S.logo} />
             <span style={S.brandName}>Patient Portal</span>
           </div>
           <div style={S.headerRight}>
-            <span style={S.prnBadge}>{patient.prn}</span>
+            <span className="pp-prn-badge" style={S.prnBadge}>{patient.prn}</span>
             <button style={S.logoutBtn} onClick={logout}>Sign Out</button>
           </div>
         </div>
@@ -199,8 +199,8 @@ export default function PatientDashboard() {
               </div>
             )}
             {todayVisit ? (
-              <div style={S.visitCard}>
-                <div style={S.visitHeader}>
+              <div className="pp-visit-card" style={S.visitCard}>
+                <div className="pp-visit-header" style={S.visitHeader}>
                   <div>
                     <div style={S.tokenBig}>{todayVisit.token}</div>
                     <div style={S.tokenSub}>Your Queue Token</div>
@@ -222,7 +222,7 @@ export default function PatientDashboard() {
                 {["WAITING","ASSIGNED"].includes(todayVisit.status) && (
                   <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid #F0EEEB" }}>
                     {cancelConfirm === todayVisit.id ? (
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div className="pp-cancel-row" style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         <span style={{ fontSize: 13.5, color: "#555" }}>Cancel your visit today?</span>
                         <button style={S.cancelDangerBtn} onClick={() => cancelVisit(todayVisit.id)} disabled={cancelling === todayVisit.id}>
                           {cancelling === todayVisit.id ? "Cancelling…" : "Yes, Cancel"}
@@ -308,7 +308,7 @@ export default function PatientDashboard() {
 
             {upcomingAppointments?.map(appt => (
               <div key={appt.id} style={{ ...S.historyCard, marginBottom: 12 }}>
-                <div style={S.historyHeader}>
+                <div className="pp-appt-header" style={S.historyHeader}>
                   <div>
                     <span style={S.historyToken}>{appt.visitId}</span>
                     <span style={S.historyDate}>{new Date(appt.appointmentDate).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}</span>
@@ -321,7 +321,7 @@ export default function PatientDashboard() {
                 {["SCHEDULED","WAITING","ASSIGNED"].includes(appt.status) && (
                   <div style={{ paddingTop: 10, borderTop: "1px solid #F0EEEB" }}>
                     {cancelConfirm === appt.id ? (
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div className="pp-cancel-row" style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         <span style={{ fontSize: 13, color: "#555" }}>Cancel this appointment?</span>
                         <button style={S.cancelDangerBtn} onClick={() => cancelVisit(appt.id)} disabled={cancelling === appt.id}>
                           {cancelling === appt.id ? "Cancelling…" : "Yes, Cancel"}
@@ -350,7 +350,7 @@ export default function PatientDashboard() {
               <div style={S.historyList}>
                 {history.map(h => (
                   <div key={h.id} style={S.historyCard}>
-                    <div style={S.historyHeader}>
+                    <div className="pp-appt-header" style={S.historyHeader}>
                       <div>
                         <span style={S.historyToken}>{h.visit.token}</span>
                         <span style={S.historyDate}>{new Date(h.visit.visitDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span>
@@ -370,14 +370,23 @@ export default function PatientDashboard() {
 
       <style>{`
         @media (max-width: 639px) {
-          .pp-main       { padding: 20px 14px !important; }
-          .pp-tabs       { flex-wrap: wrap !important; }
+          .pp-main        { padding: 16px 14px !important; }
+          .pp-header-inner{ padding: 0 14px !important; }
+          .pp-prn-badge   { display: none !important; }
+          .pp-tabs        { flex-wrap: wrap !important; }
           .pp-tabs button { flex: none !important; font-size: 12px !important; padding: 8px 10px !important; }
-          .pp-info-grid  { grid-template-columns: 1fr !important; }
-          .pp-appt-form  { grid-template-columns: 1fr !important; }
+          .pp-visit-card  { padding: 18px 16px !important; }
+          .pp-visit-header{ flex-wrap: wrap !important; gap: 10px !important; }
+          .pp-info-grid   { grid-template-columns: 1fr !important; }
+          .pp-appt-header { flex-wrap: wrap !important; gap: 8px !important; align-items: flex-start !important; }
+          .pp-cancel-row  { flex-wrap: wrap !important; gap: 8px !important; }
+          .pp-appt-form   { grid-template-columns: 1fr !important; }
+          .pp-appt-book-btn { width: 100% !important; }
+          .pp-join-btn-wrap { text-align: center !important; }
         }
         @media (min-width: 640px) and (max-width: 1023px) {
           .pp-main { padding: 24px 18px !important; }
+          .pp-appt-form { grid-template-columns: 1fr 1fr !important; }
         }
       `}</style>
     </div>

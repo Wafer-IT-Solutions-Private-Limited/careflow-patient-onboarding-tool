@@ -7,6 +7,27 @@ function hashAadhaar(aadhaar: string): string {
   return createHash("sha256").update(aadhaar.trim()).digest("hex");
 }
 
+// GET /api/patient/health-setup — returns whether Aadhaar is already on file
+export async function GET(req: NextRequest) {
+  try {
+    const cookie = req.cookies.get("token");
+    if (!cookie) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const jwt = await verifyToken(cookie.value);
+    if (jwt.role !== "PATIENT") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+    const patient = await prisma.patient.findFirst({
+      where: { userId: jwt.id },
+      select: { aadhaarHash: true },
+    });
+    if (!patient) return NextResponse.json({ error: "Patient profile not found" }, { status: 404 });
+
+    return NextResponse.json({ hasAadhaar: !!patient.aadhaarHash });
+  } catch (e) {
+    const msg = process.env.NODE_ENV === "production" ? "Internal server error" : (e instanceof Error ? e.message : String(e));
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}
+
 // POST /api/patient/health-setup
 export async function POST(req: NextRequest) {
   try {

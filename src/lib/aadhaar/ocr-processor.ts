@@ -173,11 +173,12 @@ export async function ocrAadhaarNumber(
   canvas: HTMLCanvasElement,
   rect:   { cx: number; cy: number; cw: number; ch: number },
 ): Promise<{ number: string | null; verified: boolean }> {
-  // Aadhaar number is printed at ~70–92% of card height (bottom band)
+  // Aadhaar number sits at ~73–86% of card height.
+  // Narrower strip avoids the footer row (phone/email/website) that contains "1947".
   const sx = rect.cx;
-  const sy = rect.cy + Math.floor(rect.ch * 0.68);
+  const sy = rect.cy + Math.floor(rect.ch * 0.73);
   const sw = rect.cw;
-  const sh = Math.floor(rect.ch * 0.24);
+  const sh = Math.floor(rect.ch * 0.13);
   if (sh < 10) return { number: null, verified: false };
 
   // Crop + scale 2× + binarize for clean digit recognition
