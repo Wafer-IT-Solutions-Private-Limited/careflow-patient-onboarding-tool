@@ -13,7 +13,7 @@ interface Visit {
   status: string;
   paymentType: string | null;
   cancelReason: string | null;
-  patient: { prn: string; name: string; phone?: string | null };
+  patient: { prn: string; name: string; phone?: string | null; deletedAt?: string | null };
   doctor?: { user: { name: string } } | null;
 }
 
@@ -142,7 +142,10 @@ export default function AdminVisitsPage() {
                         onMouseLeave={e => (e.currentTarget.style.background = "")}>
                         <td data-label="Date" style={{ padding: "11px 14px", color: "#555", whiteSpace: "nowrap", fontSize: 12 }}>{fmt(v.visitDate)}</td>
                         <td data-label="Token" style={{ padding: "11px 14px", fontWeight: 800, fontSize: 15, color: "#0C1929" }}>{v.token}</td>
-                        <td data-label="Patient" style={{ padding: "11px 14px", fontWeight: 600, color: "#111" }}>{v.patient.name}</td>
+                        <td data-label="Patient" style={{ padding: "11px 14px", fontWeight: 600, color: "#111" }}>
+                          {v.patient.name}
+                          {v.patient.deletedAt && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, background: "#F3F4F6", color: "#9CA3AF", borderRadius: 6, padding: "2px 6px", verticalAlign: "middle" }}>removed</span>}
+                        </td>
                         <td data-label="PRN" style={{ padding: "11px 14px", fontSize: 12, color: "#6D28D9", fontWeight: 700 }}>{v.patient.prn}</td>
                         <td data-label="Doctor" style={{ padding: "11px 14px", color: "#555" }}>{v.doctor?.user.name ?? <span style={{ color: "#ccc" }}>—</span>}</td>
                         <td data-label="Status" style={{ padding: "11px 14px" }}>

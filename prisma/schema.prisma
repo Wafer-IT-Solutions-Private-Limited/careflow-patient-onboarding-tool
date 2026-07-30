@@ -89,6 +89,7 @@ model Patient {
   healthSetupComplete Boolean   @default(false)
   dataConsentGiven    Boolean   @default(false)
   dataConsentAt       DateTime?
+  deletedAt           DateTime?
   createdAt           DateTime  @default(now())
 
   visits    Visit[]

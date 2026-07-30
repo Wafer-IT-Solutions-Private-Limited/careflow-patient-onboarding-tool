@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
     orderBy: { visitDate: "desc" },
     take: 200,
     include: {
-      patient: { select: { prn: true, name: true, phone: true } },
+      patient: { select: { prn: true, name: true, phone: true, deletedAt: true } },
       doctor:  { include: { user: { select: { name: true } } } },
     },
   });

@@ -29,7 +29,8 @@ export async function GET(req: NextRequest) {
     });
     return NextResponse.json({ appointments });
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+    const msg = process.env.NODE_ENV === "production" ? "Internal server error" : (e instanceof Error ? e.message : String(e));
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
 
@@ -90,6 +91,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ visit }, { status: 201 });
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+    const msg = process.env.NODE_ENV === "production" ? "Internal server error" : (e instanceof Error ? e.message : String(e));
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

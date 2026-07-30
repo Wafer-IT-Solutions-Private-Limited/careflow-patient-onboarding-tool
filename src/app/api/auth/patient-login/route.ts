@@ -33,6 +33,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No account found. Please contact the hospital reception." }, { status: 401 });
     }
 
+    if (patient.deletedAt) {
+      return NextResponse.json({ error: "This account has been deactivated. Please contact the hospital reception." }, { status: 401 });
+    }
+
     const user = await prisma.user.findUnique({ where: { id: patient.userId } });
     if (!user) return NextResponse.json({ error: "Account not found" }, { status: 401 });
 

@@ -365,13 +365,16 @@ export default function AdminPatientsPage() {
         <div style={overlay}>
           <div style={{ ...modal, maxWidth: 380 }}>
             <div style={{ width: 44, height: 44, background: "#FEE2E2", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, marginBottom: 14 }}>🗑️</div>
-            <div style={modalHdr}>Delete patient?</div>
-            <p style={{ fontSize: 13.5, color: "#666", lineHeight: 1.55, marginBottom: 20 }}>
-              This will permanently remove <strong>{deleting.name}</strong> and all their data.
+            <div style={modalHdr}>Remove patient account?</div>
+            <p style={{ fontSize: 13.5, color: "#666", lineHeight: 1.55, marginBottom: 12 }}>
+              <strong>{deleting.name}</strong>'s account will be deactivated and personal details removed.
+            </p>
+            <p style={{ fontSize: 12.5, color: "#888", lineHeight: 1.55, marginBottom: 20, background: "#F8F7F5", borderRadius: 8, padding: "8px 12px" }}>
+              Visit records, consultation history, and audit logs are retained for medical record-keeping.
             </p>
             <div style={{ display: "flex", gap: 10 }}>
               <button onClick={() => setDeleting(null)} style={cancelBtn}>Cancel</button>
-              <button onClick={confirmDelete} disabled={delBusy} style={{ ...primaryBtn, background: delBusy ? "#FCA5A5" : "#B91C1C" }}>{delBusy ? "Deleting…" : "Yes, delete"}</button>
+              <button onClick={confirmDelete} disabled={delBusy} style={{ ...primaryBtn, background: delBusy ? "#FCA5A5" : "#B91C1C" }}>{delBusy ? "Removing…" : "Yes, remove"}</button>
             </div>
           </div>
         </div>

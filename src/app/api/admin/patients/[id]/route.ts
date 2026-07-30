@@ -117,7 +117,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   return NextResponse.json({ success: true });
 }
 
-// DELETE /api/admin/patients/[id]
+// DELETE /api/admin/patients/[id] — soft delete: preserves visits, consultations, and audit logs
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!await requireAdmin(req))
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -129,21 +129,43 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   if (!target || target.role !== "PATIENT")
     return NextResponse.json({ error: "Patient not found" }, { status: 404 });
 
-  // Cascade-delete in FK order to satisfy RESTRICT constraints
   const patients = await prisma.patient.findMany({ where: { userId: id }, select: { id: true } });
   const patientIds = patients.map(p => p.id);
-  const histories = await prisma.patientHistory.findMany({ where: { patientId: { in: patientIds } }, select: { id: true } });
-  const historyIds = histories.map(h => h.id);
-  const visits = await prisma.visit.findMany({ where: { patientId: { in: patientIds } }, select: { id: true } });
-  const visitIds = visits.map(v => v.id);
+
+  // Remove active queue entries and cancel any in-progress visits so the queue is clean
+  const activeVisits = await prisma.visit.findMany({
+    where: { patientId: { in: patientIds }, status: { in: ["WAITING", "ASSIGNED", "IN_CONSULTATION"] } },
+    select: { id: true },
+  });
+  const activeVisitIds = activeVisits.map(v => v.id);
 
   await prisma.$transaction([
-    prisma.doctorConsultation.deleteMany({ where: { historyId: { in: historyIds } } }),
-    prisma.patientHistory.deleteMany({ where: { patientId: { in: patientIds } } }),
-    prisma.queue.deleteMany({ where: { visitId: { in: visitIds } } }),
-    prisma.visit.deleteMany({ where: { patientId: { in: patientIds } } }),
-    prisma.patient.deleteMany({ where: { userId: id } }),
-    prisma.user.delete({ where: { id } }),
+    // Drop queue entries for active visits
+    prisma.queue.deleteMany({ where: { visitId: { in: activeVisitIds } } }),
+    // Mark those visits cancelled
+    prisma.visit.updateMany({
+      where: { id: { in: activeVisitIds } },
+      data: { status: "CANCELLED", cancelReason: "Patient account removed" },
+    }),
+    // Soft-delete: clear identifiable PII, mark deleted; name/DOB/gender kept for medical records
+    prisma.patient.updateMany({
+      where: { userId: id },
+      data: {
+        deletedAt:   new Date(),
+        phone:       null,
+        aadhaarHash: null,
+        address:     null,
+        city:        null,
+        state:       null,
+        pincode:     null,
+        healthIssues: null,
+      },
+    }),
+    // Invalidate the account so the patient cannot log in
+    prisma.user.update({
+      where: { id },
+      data: { email: null, password: "__DELETED__", isVerified: false },
+    }),
   ]);
 
   return NextResponse.json({ success: true });
