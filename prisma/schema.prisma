@@ -87,6 +87,8 @@ model Patient {
   priority            String    @default("NORMAL")
   aadhaarHash         String?   @unique      // SHA-256 of Aadhaar — for duplicate detection only
   healthSetupComplete Boolean   @default(false)
+  dataConsentGiven    Boolean   @default(false)
+  dataConsentAt       DateTime?
   createdAt           DateTime  @default(now())
 
   visits    Visit[]

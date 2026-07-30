@@ -229,6 +229,8 @@ export default function AdminDashboard() {
       )}
 
       <style>{`
+        input::placeholder, textarea::placeholder { color: #888 !important; opacity: 1; }
+        select option { color: #111; }
         @media (max-width: 639px) {
           .ad-main   { padding: 16px 14px !important; }
           .ad-stats  { grid-template-columns: repeat(2, 1fr) !important; gap: 8px !important; }
@@ -302,7 +304,7 @@ const S: Record<string, React.CSSProperties> = {
   modalTitle:     { fontSize: 17, fontWeight: 700, color: "#0C1929", marginBottom: 8 },
   modalSub:       { fontSize: 13.5, color: "#555", marginBottom: 20, lineHeight: 1.5 },
   fieldLabel:     { display: "block", fontSize: 11, fontWeight: 700, color: "#666", letterSpacing: ".07em", textTransform: "uppercase" as const, marginBottom: 6 },
-  input:          { width: "100%", padding: "10px 14px", border: "1.5px solid #E2E0DC", borderRadius: 9, fontSize: 14, outline: "none", boxSizing: "border-box" as const },
+  input:          { width: "100%", padding: "10px 14px", border: "1.5px solid #E2E0DC", borderRadius: 9, fontSize: 14, outline: "none", boxSizing: "border-box" as const, color: "#111", background: "#FDFCFB" },
   modalCancelBtn: { padding: "10px 18px", background: "transparent", color: "#555", border: "1.5px solid #D0CEC9", borderRadius: 9, fontSize: 13.5, fontWeight: 600, cursor: "pointer" },
   modalConfirmBtn:{ padding: "10px 18px", background: "#DC2626", color: "#fff", border: "none", borderRadius: 9, fontSize: 13.5, fontWeight: 600, cursor: "pointer" },
 };

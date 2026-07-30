@@ -33,6 +33,8 @@ export default function WalkInPage() {
 
   const [showScanner, setShowScanner] = useState(false);
 
+  const [consentGiven, setConsentGiven] = useState(false);
+
   const [form, setForm] = useState({
     name: "", dateOfBirth: "", gender: "", phone: "", aadhaar: "",
     address: "", city: "", state: "", pincode: "",
@@ -77,12 +79,13 @@ export default function WalkInPage() {
     if (!form.dateOfBirth)        { toast.error("Date of birth is required"); return; }
     if (!form.gender)             { toast.error("Gender is required"); return; }
     if (!form.aadhaar.trim())     { toast.error("Aadhaar number is required"); return; }
+    if (!consentGiven)            { toast.error("Patient consent confirmation is required"); return; }
 
     setLoading(true);
     try {
       const res = await fetch("/api/patients", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, consentGiven: true }),
       });
       const data = await res.json();
       if (res.status === 409 && data.patient) {
@@ -111,7 +114,7 @@ export default function WalkInPage() {
 
   const reset = () => {
     setStep("home"); setLookupVal(""); setPatient(null); setVisitResult(null);
-    setVisitPaymentType("Cash");
+    setVisitPaymentType("Cash"); setConsentGiven(false);
     setForm({ name: "", dateOfBirth: "", gender: "", phone: "", aadhaar: "", address: "", city: "", state: "", pincode: "", healthIssues: "", priority: "NORMAL" });
   };
 
@@ -290,6 +293,16 @@ export default function WalkInPage() {
               <option value="NORMAL">Normal</option><option value="URGENT">Urgent</option><option value="EMERGENCY">Emergency</option>
             </select>
           </div>
+          {/* DPDP Consent */}
+          <div style={{ gridColumn: "1 / -1", background: consentGiven ? "#F0FDF4" : "#F0F7FF", border: `1.5px solid ${consentGiven ? "#A7F3D0" : "#BFDBFE"}`, borderRadius: 10, padding: "14px 16px", transition: "all .2s" }}>
+            <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
+              <input type="checkbox" checked={consentGiven} onChange={e => setConsentGiven(e.target.checked)}
+                style={{ marginTop: 2, width: 16, height: 16, accentColor: "#059669", cursor: "pointer", flexShrink: 0 }} />
+              <span style={{ fontSize: 12.5, color: consentGiven ? "#065F46" : "#1E3A6E", lineHeight: 1.6 }}>
+                <strong>DPDP Consent (required):</strong> I confirm the patient has provided informed verbal consent to the collection and processing of their personal data for healthcare purposes as required under the <em>Digital Personal Data Protection Act, 2023</em>.
+              </span>
+            </label>
+          </div>
         </div>
         <div className="wi-btn-row" style={S.btnRow}>
           <button style={S.btnSecondary} onClick={() => router.push("/admin")}>← Dashboard</button>
@@ -327,6 +340,8 @@ export default function WalkInPage() {
 function WalkInStyles() {
   return (
     <style>{`
+      input::placeholder, textarea::placeholder { color: #888 !important; opacity: 1; }
+      select option { color: #111; }
       @media (max-width: 639px) {
         .wi-card     { padding: 24px 18px !important; }
         .wi-home-grid{ grid-template-columns: 1fr !important; }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { createHash } from "crypto";
+import { createHash, randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { generatePRN } from "@/lib/counters";
 import { logAudit } from "@/lib/audit";
@@ -11,10 +11,8 @@ function hashAadhaar(raw: string) {
   return createHash("sha256").update(raw.replace(/\s/g, "")).digest("hex");
 }
 
-function dummyPassword(name: string, dob: string): string {
-  const prefix = name.trim().toLowerCase().replace(/\s+/g, "").slice(0, 4);
-  const year   = dob ? new Date(dob).getFullYear().toString() : "0000";
-  return `${prefix}${year}`;
+function generateTempPassword(): string {
+  return randomBytes(5).toString("hex"); // 10 hex chars, cryptographically random
 }
 
 // POST /api/patients — create walk-in patient with User account; ADMIN only
@@ -27,7 +25,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const body = await req.json();
-    const { name, dateOfBirth, gender, phone, address, city, state, pincode, healthIssues, priority, aadhaar } = body;
+    const { name, dateOfBirth, gender, phone, address, city, state, pincode, healthIssues, priority, aadhaar, consentGiven } = body;
 
     // Mandatory field validation
     if (!name?.trim())        return NextResponse.json({ error: "Patient name is required" }, { status: 400 });
@@ -48,7 +46,7 @@ export async function POST(req: NextRequest) {
     if (existingAadhaar) return NextResponse.json({ error: "A patient with this Aadhaar already exists", patient: existingAadhaar }, { status: 409 });
 
     const prn      = await generatePRN();
-    const rawPwd   = dummyPassword(name, dateOfBirth);
+    const rawPwd   = generateTempPassword();
     const pwdHash  = await bcrypt.hash(rawPwd, 12);
 
     // Create User + Patient in a transaction
@@ -75,6 +73,8 @@ export async function POST(req: NextRequest) {
             priority:           priority ?? "NORMAL",
             aadhaarHash,
             healthSetupComplete: false,
+            dataConsentGiven: !!consentGiven,
+            dataConsentAt: consentGiven ? new Date() : undefined,
           },
         },
       },

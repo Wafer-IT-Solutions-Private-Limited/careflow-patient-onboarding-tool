@@ -128,6 +128,8 @@ export default function HealthSetupPage() {
       </div>
 
       <style>{`
+        input::placeholder, textarea::placeholder { color: #888 !important; opacity: 1; }
+        select option { color: #111; }
         @media (max-width: 639px) {
           .hs-card { padding: 24px 18px !important; }
           .hs-grid { grid-template-columns: 1fr !important; }

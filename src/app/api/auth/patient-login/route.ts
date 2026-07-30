@@ -2,10 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { signToken } from "@/lib/auth";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 // POST /api/auth/patient-login — login with phone or PRN
 export async function POST(req: NextRequest) {
   try {
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? "unknown";
+    const rl = checkRateLimit(`patient-login:${ip}`);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: `Too many login attempts. Try again in ${Math.ceil(rl.retryAfterSecs / 60)} minutes.` },
+        { status: 429 }
+      );
+    }
+
     const { identifier, password } = await req.json();
     if (!identifier?.trim() || !password) {
       return NextResponse.json({ error: "Phone/PRN and password are required" }, { status: 400 });

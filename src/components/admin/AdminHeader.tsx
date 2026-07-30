@@ -3,13 +3,14 @@
 import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
-type Tab = "dashboard" | "patients" | "doctors" | "visits";
+type Tab = "dashboard" | "patients" | "doctors" | "visits" | "audit";
 
 const TABS: { id: Tab; label: string; href: string }[] = [
   { id: "dashboard", label: "Dashboard",  href: "/admin" },
   { id: "patients",  label: "Patients",   href: "/admin/patients" },
   { id: "doctors",   label: "Doctors",    href: "/admin/doctors" },
   { id: "visits",    label: "All Visits", href: "/admin/visits" },
+  { id: "audit",     label: "Audit Log",  href: "/admin/audit" },
 ];
 
 export default function AdminHeader() {

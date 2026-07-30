@@ -165,6 +165,8 @@ export default function AdminVisitsPage() {
       </main>
 
       <style>{`
+        input::placeholder, textarea::placeholder { color: #888 !important; opacity: 1; }
+        select option { color: #111; }
         @media (max-width: 639px) {
           .av-main { padding: 20px 14px !important; }
           .av-table-wrap { overflow-x: visible !important; }
@@ -210,6 +212,6 @@ export default function AdminVisitsPage() {
 }
 
 const S: Record<string, React.CSSProperties> = {
-  input:    { padding: "9px 14px", border: "1.5px solid #E2E0DC", borderRadius: 9, fontSize: 13, outline: "none", background: "#fff", flex: 1, minWidth: 180 },
+  input:    { padding: "9px 14px", border: "1.5px solid #E2E0DC", borderRadius: 9, fontSize: 13, outline: "none", background: "#fff", flex: 1, minWidth: 180, color: "#111" },
   clearBtn: { padding: "9px 16px", background: "transparent", color: "#666", border: "1.5px solid #D0CEC9", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer" },
 };

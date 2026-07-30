@@ -4,9 +4,19 @@ import { prisma } from "@/lib/prisma";
 import { signToken } from "@/lib/auth";
 import { loginSchema, detectRoleFromEmail } from "@/lib/validators/auth";
 import { ROLE_REDIRECTS } from "@/constants/roles";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? "unknown";
+    const rl = checkRateLimit(`staff-login:${ip}`);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: `Too many login attempts. Try again in ${Math.ceil(rl.retryAfterSecs / 60)} minutes.` },
+        { status: 429 }
+      );
+    }
+
     const body   = await req.json();
     const result = loginSchema.safeParse(body);
     if (!result.success) return NextResponse.json({ error: result.error.issues[0].message }, { status: 400 });

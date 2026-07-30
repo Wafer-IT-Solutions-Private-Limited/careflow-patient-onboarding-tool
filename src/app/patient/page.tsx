@@ -54,6 +54,7 @@ export default function PatientDashboard() {
 
   const patientIdRef    = useRef<string | null>(null);
   const selfCancelRef   = useRef(false);
+  const notifiedRef     = useRef(false); // prevents re-firing "your turn" notification
 
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -100,6 +101,26 @@ export default function PatientDashboard() {
     return () => es?.close();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // "Your turn is coming" browser notification when ≤2 patients ahead
+  useEffect(() => {
+    if (!data?.todayVisit) return;
+    const { status } = data.todayVisit;
+    if (!["WAITING", "ASSIGNED"].includes(status)) { notifiedRef.current = false; return; }
+    if (data.queueAhead > 2) { notifiedRef.current = false; return; }
+    if (notifiedRef.current) return;
+    notifiedRef.current = true;
+
+    const body = data.queueAhead === 0
+      ? "You're next! Please proceed to the consultation area."
+      : `Only ${data.queueAhead} patient${data.queueAhead === 1 ? "" : "s"} ahead of you.`;
+
+    const fire = () => new Notification("CareFlow — Your turn is coming up!", { body, icon: "/waferlogo.png" });
+
+    if (typeof Notification === "undefined") return;
+    if (Notification.permission === "granted") fire();
+    else if (Notification.permission !== "denied") Notification.requestPermission().then(p => { if (p === "granted") fire(); });
+  }, [data?.queueAhead, data?.todayVisit?.status]);
 
   const joinQueue = async () => {
     setJoining(true);
@@ -359,7 +380,15 @@ export default function PatientDashboard() {
                     </div>
                     {h.healthNotes && <div style={S.historySection}><div style={S.sectionLabel}>Health Notes</div><div style={S.sectionText}>{h.healthNotes}</div></div>}
                     {h.prescription && <div style={S.historySection}><div style={S.sectionLabel}>Prescription</div><div style={S.sectionText}>{h.prescription}</div></div>}
-                    {h.duration && <div style={S.historyFooter}>Duration: {Math.round(h.duration / 60)} min</div>}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 10 }}>
+                      {h.duration ? <div style={S.historyFooter}>Duration: {Math.round(h.duration / 60)} min</div> : <div />}
+                      {h.prescription && (
+                        <a href={`/prescription/${h.id}`} target="_blank" rel="noopener noreferrer"
+                          style={{ fontSize: 12.5, fontWeight: 700, color: "#2563EB", textDecoration: "none", padding: "5px 14px", border: "1.5px solid #BFDBFE", borderRadius: 7, background: "#EFF6FF" }}>
+                          🖨️ Print Prescription
+                        </a>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

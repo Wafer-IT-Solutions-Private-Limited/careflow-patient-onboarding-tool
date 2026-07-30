@@ -462,6 +462,8 @@ export default function DoctorDashboard() {
       </main>
 
       <style>{`
+        input::placeholder, textarea::placeholder { color: #888 !important; opacity: 1; }
+        select option { color: #111; }
         @media (max-width: 639px) {
           .dr-header-inner { height: auto !important; flex-wrap: wrap !important; padding: 10px 14px !important; gap: 10px !important; }
           .dr-header-right { width: 100% !important; justify-content: space-between !important; }

@@ -189,7 +189,7 @@ export default function AdminPatientsPage() {
             <input
               value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Search by name, email or PRN…"
-              style={{ flex: 1, maxWidth: 380, minWidth: 200, padding: "9px 14px", border: "1.5px solid #E2E0DC", borderRadius: 9, fontSize: 14, outline: "none", background: "#fff" }}
+              style={{ flex: 1, maxWidth: 380, minWidth: 200, padding: "9px 14px", border: "1.5px solid #E2E0DC", borderRadius: 9, fontSize: 14, outline: "none", background: "#fff", color: "#111" }}
             />
             <div style={{ fontSize: 13, color: "#888", fontWeight: 500 }}>{filtered.length} patient{filtered.length !== 1 ? "s" : ""}</div>
           </div>
@@ -378,6 +378,8 @@ export default function AdminPatientsPage() {
       )}
 
       <style>{`
+        input::placeholder, textarea::placeholder { color: #888 !important; opacity: 1; }
+        select option { color: #111; }
         @media (max-width: 639px) {
           .apm-main { padding: 16px 14px !important; }
           .apm-search-row { flex-direction: column !important; align-items: stretch !important; }
@@ -429,7 +431,7 @@ const overlay: React.CSSProperties = { position: "fixed", inset: 0, background: 
 const modal:   React.CSSProperties = { background: "#fff", borderRadius: 18, padding: 28, width: "100%", boxShadow: "0 20px 60px rgba(0,0,0,.15)", maxHeight: "90vh", overflowY: "auto" };
 const modalHdr:React.CSSProperties = { fontSize: 17, fontWeight: 700, color: "#111", marginBottom: 20 };
 const lbl:     React.CSSProperties = { display: "block", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".06em", color: "#666", marginBottom: 5 };
-const inp:     React.CSSProperties = { width: "100%", padding: "9px 12px", border: "1.5px solid #E2E0DC", borderRadius: 8, fontSize: 14, outline: "none", boxSizing: "border-box" };
+const inp:     React.CSSProperties = { width: "100%", padding: "9px 12px", border: "1.5px solid #E2E0DC", borderRadius: 8, fontSize: 14, outline: "none", boxSizing: "border-box", color: "#111", background: "#FDFCFB" };
 const btn:     React.CSSProperties = { padding: "5px 12px", border: "1.5px solid #DDD", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", background: "#fff", color: "#333" };
 const cancelBtn: React.CSSProperties = { flex: 1, padding: "10px", border: "1.5px solid #E2E0DC", borderRadius: 9, fontSize: 14, fontWeight: 600, cursor: "pointer", background: "#fff", color: "#555" };
 const primaryBtn: React.CSSProperties = { flex: 1, padding: "10px", border: "none", borderRadius: 9, fontSize: 14, fontWeight: 600, cursor: "pointer", background: "#0C1929", color: "#fff" };
