@@ -6,7 +6,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const cookie = req.cookies.get("token");
     if (!cookie) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    await verifyToken(cookie.value);
+    const jwt = await verifyToken(cookie.value);
+    // Only ADMIN and DOCTOR may fetch arbitrary visit records
+    if (jwt.role !== "ADMIN" && jwt.role !== "DOCTOR")
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const { id } = await params;
     const visit = await prisma.visit.findUnique({

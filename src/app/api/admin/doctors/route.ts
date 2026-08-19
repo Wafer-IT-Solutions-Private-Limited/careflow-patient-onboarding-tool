@@ -38,9 +38,6 @@ export async function POST(req: NextRequest) {
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) return NextResponse.json({ error: "Email already in use" }, { status: 409 });
 
-    if (!email.endsWith("@hospital.com"))
-      return NextResponse.json({ error: "Doctor email must use @hospital.com" }, { status: 400 });
-
     const hash = await bcrypt.hash(password, 12);
     const user = await prisma.user.create({
       data: {

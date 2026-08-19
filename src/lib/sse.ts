@@ -7,7 +7,7 @@ emitter.setMaxListeners(200);
 export type SSEEvent =
   | { type: "queue:updated";     room: "admin" | `doctor:${string}` | `patient:${string}` }
   | { type: "patient:called";    room: `doctor:${string}` | `patient:${string}`; token: string }
-  | { type: "visit:cancelled";   room: `doctor:${string}` | `patient:${string}` | "admin"; visitId: string }
+  | { type: "visit:cancelled";   room: `doctor:${string}` | `patient:${string}` | "admin"; visitId: string; cancelReason?: string }
   | { type: "doctor:status";     room: "admin"; doctorId: string; availability: string }
   | { type: "patient:registered";room: "admin"; prn: string }
   | { type: "appointment:booked";room: `patient:${string}` };

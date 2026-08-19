@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     const visits = await prisma.visit.findMany({
       where: { visitDate: { gte: todayStart, lte: todayEnd } },
       include: {
-        patient: { select: { prn: true, name: true, gender: true, phone: true, priority: true } },
+        patient: { select: { prn: true, name: true, gender: true, phone: true, priority: true, deletedAt: true } },
         doctor:  { include: { user: { select: { name: true } } } },
         queue:   true,
       },

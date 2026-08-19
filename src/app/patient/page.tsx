@@ -42,15 +42,19 @@ export default function PatientDashboard() {
   const [cancelConfirm, setCancelConfirm] = useState<string | null>(null);
   const [tab, setTab]             = useState<"today" | "appointments" | "history">("today");
   const [healthIssue, setHealthIssue] = useState("");
+  const [queuePayment, setQueuePayment] = useState("Cash");
+  const [adminCancelNote, setAdminCancelNote] = useState<string | null>(null);
 
   // Appointment booking form
   const [showApptForm, setShowApptForm] = useState(false);
   const [apptDate,     setApptDate]     = useState("");
   const [apptIssue,    setApptIssue]    = useState("");
+  const [apptPayment,  setApptPayment]  = useState("Cash");
   const [booking,      setBooking]      = useState(false);
 
   const patientIdRef    = useRef<string | null>(null);
   const selfCancelRef   = useRef(false);
+  const notifiedRef     = useRef(false); // prevents re-firing "your turn" notification
 
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -78,7 +82,11 @@ export default function PatientDashboard() {
           if (event.type === "queue:updated" || event.type === "patient:called" || event.type === "visit:cancelled" || event.type === "appointment:booked") {
             loadDashboard();
             if (event.type === "patient:called") toast.success(`Your turn! Token ${event.token}`);
-            if (event.type === "visit:cancelled" && !selfCancelRef.current) toast.error("Your visit was cancelled by admin");
+            if (event.type === "visit:cancelled" && !selfCancelRef.current) {
+              const note = event.cancelReason ? ` — ${event.cancelReason}` : "";
+              toast.error(`Your appointment was cancelled by the admin${note}`, { duration: 8000 });
+              setAdminCancelNote(event.cancelReason ?? "Cancelled by admin");
+            }
           }
         } catch { /* ignore parse errors */ }
       };
@@ -94,12 +102,32 @@ export default function PatientDashboard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // "Your turn is coming" browser notification when ≤2 patients ahead
+  useEffect(() => {
+    if (!data?.todayVisit) return;
+    const { status } = data.todayVisit;
+    if (!["WAITING", "ASSIGNED"].includes(status)) { notifiedRef.current = false; return; }
+    if (data.queueAhead > 2) { notifiedRef.current = false; return; }
+    if (notifiedRef.current) return;
+    notifiedRef.current = true;
+
+    const body = data.queueAhead === 0
+      ? "You're next! Please proceed to the consultation area."
+      : `Only ${data.queueAhead} patient${data.queueAhead === 1 ? "" : "s"} ahead of you.`;
+
+    const fire = () => new Notification("CareFlow — Your turn is coming up!", { body, icon: "/waferlogo.png" });
+
+    if (typeof Notification === "undefined") return;
+    if (Notification.permission === "granted") fire();
+    else if (Notification.permission !== "denied") Notification.requestPermission().then(p => { if (p === "granted") fire(); });
+  }, [data?.queueAhead, data?.todayVisit?.status]);
+
   const joinQueue = async () => {
     setJoining(true);
     try {
       const res = await fetch("/api/patient/join-queue", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ healthIssue: healthIssue.trim() || undefined }),
+        body: JSON.stringify({ healthIssue: healthIssue.trim() || undefined, paymentType: queuePayment }),
       });
       const d = await res.json();
       if (res.status === 409) { toast.error(d.error); return; }
@@ -132,7 +160,7 @@ export default function PatientDashboard() {
     try {
       const res = await fetch("/api/patient/appointments", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ appointmentDate: apptDate, healthIssue: apptIssue.trim() || undefined }),
+        body: JSON.stringify({ appointmentDate: apptDate, healthIssue: apptIssue.trim() || undefined, paymentType: apptPayment }),
       });
       const d = await res.json();
       if (!res.ok) { toast.error(d.error ?? "Failed to book appointment"); return; }
@@ -152,26 +180,26 @@ export default function PatientDashboard() {
   return (
     <div style={S.page}>
       <header style={S.header}>
-        <div style={S.headerInner}>
+        <div className="pp-header-inner" style={S.headerInner}>
           <div style={S.brand}>
             <img src="/waferlogo.png" alt="Wafer" style={S.logo} />
             <span style={S.brandName}>Patient Portal</span>
           </div>
           <div style={S.headerRight}>
-            <span style={S.prnBadge}>{patient.prn}</span>
+            <span className="pp-prn-badge" style={S.prnBadge}>{patient.prn}</span>
             <button style={S.logoutBtn} onClick={logout}>Sign Out</button>
           </div>
         </div>
       </header>
 
-      <main style={S.main}>
+      <main className="pp-main" style={S.main}>
         <div style={S.welcome}>
           <h1 style={S.welcomeH}>Welcome, {patient.name}</h1>
           <p style={S.welcomeSub}>PRN: <strong>{patient.prn}</strong></p>
         </div>
 
-        <div style={S.tabs}>
-          <button style={{ ...S.tab, ...(tab === "today"        ? S.tabActive : {}) }} onClick={() => setTab("today")}>Today&apos;s Visit</button>
+        <div className="pp-tabs" style={S.tabs}>
+          <button style={{ ...S.tab, ...(tab === "today"        ? S.tabActive : {}) }} onClick={() => setTab("today")}>Today&apos;s Appointment</button>
           <button style={{ ...S.tab, ...(tab === "appointments" ? S.tabActive : {}) }} onClick={() => setTab("appointments")}>
             Appointments {upcomingAppointments?.length > 0 && <span style={S.badge}>{upcomingAppointments.length}</span>}
           </button>
@@ -181,9 +209,19 @@ export default function PatientDashboard() {
         {/* ── Today tab ─────────────────────────────────────────────────── */}
         {tab === "today" && (
           <div>
+            {adminCancelNote && (
+              <div style={{ background: "#FEF2F2", border: "1.5px solid #FECACA", borderRadius: 12, padding: "14px 18px", marginBottom: 20, display: "flex", alignItems: "flex-start", gap: 12 }}>
+                <span style={{ fontSize: 18, lineHeight: 1 }}>ℹ️</span>
+                <div>
+                  <div style={{ fontWeight: 700, color: "#B91C1C", fontSize: 14, marginBottom: 2 }}>Your appointment was cancelled by the admin</div>
+                  <div style={{ color: "#7F1D1D", fontSize: 13 }}>{adminCancelNote}</div>
+                </div>
+                <button onClick={() => setAdminCancelNote(null)} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "#B91C1C", fontSize: 18, lineHeight: 1 }}>×</button>
+              </div>
+            )}
             {todayVisit ? (
-              <div style={S.visitCard}>
-                <div style={S.visitHeader}>
+              <div className="pp-visit-card" style={S.visitCard}>
+                <div className="pp-visit-header" style={S.visitHeader}>
                   <div>
                     <div style={S.tokenBig}>{todayVisit.token}</div>
                     <div style={S.tokenSub}>Your Queue Token</div>
@@ -192,7 +230,7 @@ export default function PatientDashboard() {
                     {STATUS_LABEL[todayVisit.status] ?? todayVisit.status}
                   </span>
                 </div>
-                <div style={S.infoGrid}>
+                <div className="pp-info-grid" style={S.infoGrid}>
                   <div style={S.infoItem}><span style={S.infoLabel}>Visit ID</span><span style={S.infoVal}>{todayVisit.visitId}</span></div>
                   {todayVisit.doctor && <div style={S.infoItem}><span style={S.infoLabel}>Assigned Doctor</span><span style={S.infoVal}>{todayVisit.doctor.user.name}</span></div>}
                   {!["COMPLETED","CANCELLED","IN_CONSULTATION"].includes(todayVisit.status) && (
@@ -205,7 +243,7 @@ export default function PatientDashboard() {
                 {["WAITING","ASSIGNED"].includes(todayVisit.status) && (
                   <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid #F0EEEB" }}>
                     {cancelConfirm === todayVisit.id ? (
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div className="pp-cancel-row" style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         <span style={{ fontSize: 13.5, color: "#555" }}>Cancel your visit today?</span>
                         <button style={S.cancelDangerBtn} onClick={() => cancelVisit(todayVisit.id)} disabled={cancelling === todayVisit.id}>
                           {cancelling === todayVisit.id ? "Cancelling…" : "Yes, Cancel"}
@@ -224,7 +262,7 @@ export default function PatientDashboard() {
                 <div style={S.emptyText}>No visit registered for today.</div>
                 <div style={S.emptySubText}>Join the walk-in queue or book a future appointment.</div>
                 <div style={{ maxWidth: 400, margin: "0 auto 16px" }}>
-                  <label style={{ ...S.fieldLabel, textAlign: "left", display: "block", marginBottom: 6 }}>Chief Complaint <span style={{ color: "#aaa", fontWeight: 400 }}>(optional)</span></label>
+                  <label style={{ ...S.fieldLabel, textAlign: "left", display: "block", marginBottom: 6 }}>Patient Reported Symptoms <span style={{ color: "#aaa", fontWeight: 400 }}>(optional)</span></label>
                   <textarea
                     style={{ ...S.textarea, marginBottom: 12 }}
                     placeholder="Describe your symptoms or reason for visit…"
@@ -232,6 +270,10 @@ export default function PatientDashboard() {
                     onChange={e => setHealthIssue(e.target.value)}
                     rows={2}
                   />
+                  <label style={{ ...S.fieldLabel, textAlign: "left", display: "block", marginBottom: 6, marginTop: 8 }}>Payment Type</label>
+                  <select style={{ ...S.input, marginBottom: 12 }} value={queuePayment} onChange={e => setQueuePayment(e.target.value)}>
+                    {["Cash","UPI","Net Banking","Debit or Credit Card","Insurance Cashless Claims"].map(o => <option key={o}>{o}</option>)}
+                  </select>
                 </div>
                 <button style={S.joinBtn} onClick={joinQueue} disabled={joining}>
                   {joining ? "Joining…" : "Join Today's Queue"}
@@ -253,7 +295,7 @@ export default function PatientDashboard() {
             {showApptForm && (
               <div style={{ ...S.visitCard, marginBottom: 20 }}>
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: "#0C1929", marginBottom: 16 }}>Book a Future Appointment</h3>
-                <div style={S.apptForm}>
+                <div className="pp-appt-form" style={S.apptForm}>
                   <div>
                     <label style={S.fieldLabel}>Appointment Date *</label>
                     <input type="date" style={S.input} min={minDateStr} value={apptDate} onChange={e => setApptDate(e.target.value)} />
@@ -261,6 +303,12 @@ export default function PatientDashboard() {
                   <div>
                     <label style={S.fieldLabel}>Reason / Health Issue <span style={{ color: "#aaa", fontWeight: 400 }}>(optional)</span></label>
                     <input style={S.input} value={apptIssue} onChange={e => setApptIssue(e.target.value)} placeholder="e.g. Follow-up, Fever…" />
+                  </div>
+                  <div>
+                    <label style={S.fieldLabel}>Payment Type</label>
+                    <select style={S.input} value={apptPayment} onChange={e => setApptPayment(e.target.value)}>
+                      {["Cash","UPI","Net Banking","Debit or Credit Card","Insurance Cashless Claims"].map(o => <option key={o}>{o}</option>)}
+                    </select>
                   </div>
                 </div>
                 <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
@@ -281,7 +329,7 @@ export default function PatientDashboard() {
 
             {upcomingAppointments?.map(appt => (
               <div key={appt.id} style={{ ...S.historyCard, marginBottom: 12 }}>
-                <div style={S.historyHeader}>
+                <div className="pp-appt-header" style={S.historyHeader}>
                   <div>
                     <span style={S.historyToken}>{appt.visitId}</span>
                     <span style={S.historyDate}>{new Date(appt.appointmentDate).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}</span>
@@ -294,7 +342,7 @@ export default function PatientDashboard() {
                 {["SCHEDULED","WAITING","ASSIGNED"].includes(appt.status) && (
                   <div style={{ paddingTop: 10, borderTop: "1px solid #F0EEEB" }}>
                     {cancelConfirm === appt.id ? (
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div className="pp-cancel-row" style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         <span style={{ fontSize: 13, color: "#555" }}>Cancel this appointment?</span>
                         <button style={S.cancelDangerBtn} onClick={() => cancelVisit(appt.id)} disabled={cancelling === appt.id}>
                           {cancelling === appt.id ? "Cancelling…" : "Yes, Cancel"}
@@ -323,7 +371,7 @@ export default function PatientDashboard() {
               <div style={S.historyList}>
                 {history.map(h => (
                   <div key={h.id} style={S.historyCard}>
-                    <div style={S.historyHeader}>
+                    <div className="pp-appt-header" style={S.historyHeader}>
                       <div>
                         <span style={S.historyToken}>{h.visit.token}</span>
                         <span style={S.historyDate}>{new Date(h.visit.visitDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span>
@@ -332,7 +380,15 @@ export default function PatientDashboard() {
                     </div>
                     {h.healthNotes && <div style={S.historySection}><div style={S.sectionLabel}>Health Notes</div><div style={S.sectionText}>{h.healthNotes}</div></div>}
                     {h.prescription && <div style={S.historySection}><div style={S.sectionLabel}>Prescription</div><div style={S.sectionText}>{h.prescription}</div></div>}
-                    {h.duration && <div style={S.historyFooter}>Duration: {Math.round(h.duration / 60)} min</div>}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 10 }}>
+                      {h.duration ? <div style={S.historyFooter}>Duration: {Math.round(h.duration / 60)} min</div> : <div />}
+                      {h.prescription && (
+                        <a href={`/prescription/${h.id}`} target="_blank" rel="noopener noreferrer"
+                          style={{ fontSize: 12.5, fontWeight: 700, color: "#2563EB", textDecoration: "none", padding: "5px 14px", border: "1.5px solid #BFDBFE", borderRadius: 7, background: "#EFF6FF" }}>
+                          🖨️ Print Prescription
+                        </a>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -340,6 +396,28 @@ export default function PatientDashboard() {
           </div>
         )}
       </main>
+
+      <style>{`
+        @media (max-width: 639px) {
+          .pp-main        { padding: 16px 14px !important; }
+          .pp-header-inner{ padding: 0 14px !important; }
+          .pp-prn-badge   { display: none !important; }
+          .pp-tabs        { flex-wrap: wrap !important; }
+          .pp-tabs button { flex: none !important; font-size: 12px !important; padding: 8px 10px !important; }
+          .pp-visit-card  { padding: 18px 16px !important; }
+          .pp-visit-header{ flex-wrap: wrap !important; gap: 10px !important; }
+          .pp-info-grid   { grid-template-columns: 1fr !important; }
+          .pp-appt-header { flex-wrap: wrap !important; gap: 8px !important; align-items: flex-start !important; }
+          .pp-cancel-row  { flex-wrap: wrap !important; gap: 8px !important; }
+          .pp-appt-form   { grid-template-columns: 1fr !important; }
+          .pp-appt-book-btn { width: 100% !important; }
+          .pp-join-btn-wrap { text-align: center !important; }
+        }
+        @media (min-width: 640px) and (max-width: 1023px) {
+          .pp-main { padding: 24px 18px !important; }
+          .pp-appt-form { grid-template-columns: 1fr 1fr !important; }
+        }
+      `}</style>
     </div>
   );
 }

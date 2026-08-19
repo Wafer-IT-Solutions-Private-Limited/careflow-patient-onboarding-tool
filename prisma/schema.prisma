@@ -34,13 +34,14 @@ enum VisitStatus {
 // ── Auth user ─────────────────────────────────────────────────────────────────
 
 model User {
-  id         String   @id @default(cuid())
-  name       String
-  email      String   @unique
-  password   String
-  role       Role     @default(PATIENT)
-  isVerified Boolean  @default(false)
-  createdAt  DateTime @default(now())
+  id                 String   @id @default(cuid())
+  name               String
+  email              String?  @unique
+  password           String
+  role               Role     @default(PATIENT)
+  isVerified         Boolean  @default(false)
+  mustChangePassword Boolean  @default(false)
+  createdAt          DateTime @default(now())
 
   doctorProfile  Doctor?
   patientProfile Patient?
@@ -76,7 +77,7 @@ model Patient {
   name                String
   dateOfBirth         DateTime?
   gender              String?
-  phone               String?
+  phone               String?   @unique
   address             String?
   city                String?
   state               String?
@@ -86,6 +87,9 @@ model Patient {
   priority            String    @default("NORMAL")
   aadhaarHash         String?   @unique      // SHA-256 of Aadhaar — for duplicate detection only
   healthSetupComplete Boolean   @default(false)
+  dataConsentGiven    Boolean   @default(false)
+  dataConsentAt       DateTime?
+  deletedAt           DateTime?
   createdAt           DateTime  @default(now())
 
   visits    Visit[]
@@ -103,6 +107,7 @@ model Visit {
   visitDate       DateTime    @default(now())
   appointmentDate DateTime?             // set for future scheduled appointments
   healthIssue     String?               // per-visit presenting complaint
+  paymentType     String?               // per-visit payment method
   status          VisitStatus @default(WAITING)
   queuePosition   Int?
   priority        String      @default("NORMAL")

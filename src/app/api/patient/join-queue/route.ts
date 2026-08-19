@@ -31,7 +31,8 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const healthIssue = typeof body.healthIssue === "string" ? body.healthIssue.trim() || undefined : undefined;
+    const healthIssue  = typeof body.healthIssue  === "string" ? body.healthIssue.trim()  || undefined : undefined;
+    const paymentType  = typeof body.paymentType  === "string" ? body.paymentType.trim()  || undefined : undefined;
 
     const doctorId = await assignDoctor();
     const visitId  = await generateVisitId();
@@ -46,6 +47,7 @@ export async function POST(req: NextRequest) {
         queuePosition: queuePos,
         priority:      patient.priority ?? "NORMAL",
         healthIssue,
+        paymentType,
         queue: {
           create: {
             doctorId:      doctorId ?? undefined,

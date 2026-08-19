@@ -36,7 +36,7 @@ export default function AdminDashboard() {
   const [appointments, setAppointments] = useState<FutureAppointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [cancelling, setCancelling] = useState<string | null>(null);
-  const [cancelModal, setCancelModal] = useState<QueueVisit | null>(null);
+  const [cancelModal, setCancelModal] = useState<{ id: string; token: string; patientName: string } | null>(null);
   const [cancelReason, setCancelReason] = useState("");
 
   const load = async () => {
@@ -66,11 +66,12 @@ export default function AdminDashboard() {
 
   const cancelVisit = async () => {
     if (!cancelModal) return;
+    if (!cancelReason.trim()) { toast.error("A closure note is required to cancel"); return; }
     setCancelling(cancelModal.id);
     try {
       const res = await fetch(`/api/admin/visits/${cancelModal.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: cancelReason || "Cancelled by admin" }),
+        body: JSON.stringify({ reason: cancelReason.trim() }),
       });
       if (res.ok) { toast.success("Visit cancelled"); setCancelModal(null); setCancelReason(""); await load(); }
       else { const d = await res.json(); toast.error(d.error ?? "Failed"); }
@@ -83,7 +84,7 @@ export default function AdminDashboard() {
     <div style={S.page}>
       <AdminHeader />
 
-      <main style={S.main}>
+      <main className="ad-main" style={S.main}>
         {loading ? (
           <div style={S.loadingText}>Loading…</div>
         ) : (
@@ -91,10 +92,10 @@ export default function AdminDashboard() {
             <h1 style={S.pageTitle}>Today&apos;s Overview</h1>
 
             {stats && (
-              <div style={S.statsGrid}>
+              <div className="ad-stats" style={S.statsGrid}>
                 {[
                   { label: "Total Patients",    value: stats.totalPatients,    icon: "👥" },
-                  { label: "Approved Doctors",  value: stats.totalDoctors,     icon: "👨‍⚕️" },
+                  { label: "Panel Doctors",      value: stats.totalDoctors,     icon: "👨‍⚕️" },
                   { label: "Available Doctors", value: stats.availableDoctors, icon: "✅" },
                   { label: "Today's Visits",    value: stats.todayVisits,      icon: "📋" },
                   { label: "Waiting",           value: stats.waitingCount,     icon: "⏳" },
@@ -110,7 +111,7 @@ export default function AdminDashboard() {
               </div>
             )}
 
-            <div style={S.actionRow}>
+            <div className="ad-action" style={S.actionRow}>
               <button style={S.actionBtn} onClick={() => router.push("/walk-in")}>+ Register Walk-In Patient</button>
             </div>
 
@@ -121,8 +122,8 @@ export default function AdminDashboard() {
               {activeQueue.length === 0 ? (
                 <div style={S.emptyQueue}>No active visits right now.</div>
               ) : (
-                <div style={S.tableWrap}>
-                  <table style={S.table}>
+                <div className="ad-table-wrap" style={S.tableWrap}>
+                  <table className="ad-table" style={S.table}>
                     <thead>
                       <tr>
                         {["Token", "Patient", "PRN", "Doctor", "Status", "Pos", "Action"].map(h => (
@@ -133,20 +134,20 @@ export default function AdminDashboard() {
                     <tbody>
                       {activeQueue.map(v => (
                         <tr key={v.id} style={S.tr}>
-                          <td style={{ ...S.td, fontWeight: 800, fontSize: 16 }}>{v.token}</td>
-                          <td style={S.td}>{v.patient.name}</td>
-                          <td style={{ ...S.td, color: "#888", fontSize: 12 }}>{v.patient.prn}</td>
-                          <td style={S.td}>{v.doctor?.user.name ?? <span style={{ color: "#aaa" }}>Unassigned</span>}</td>
-                          <td style={S.td}>
+                          <td data-label="Token" style={{ ...S.td, fontWeight: 800, fontSize: 16 }}>{v.token}</td>
+                          <td data-label="Patient" style={S.td}>{v.patient.name}</td>
+                          <td data-label="PRN" style={{ ...S.td, color: "#888", fontSize: 12 }}>{v.patient.prn}</td>
+                          <td data-label="Doctor" style={S.td}>{v.doctor?.user.name ?? <span style={{ color: "#aaa" }}>Unassigned</span>}</td>
+                          <td data-label="Status" style={S.td}>
                             <span style={{ ...S.statusPill, background: (STATUS_COLOR[v.status] ?? "#888") + "22", color: STATUS_COLOR[v.status] ?? "#888" }}>
                               {v.status.replace(/_/g, " ")}
                             </span>
                           </td>
-                          <td style={{ ...S.td, textAlign: "center" }}>{v.queue?.queuePosition ?? "—"}</td>
-                          <td style={S.td}>
+                          <td data-label="Position" style={{ ...S.td, textAlign: "center" }}>{v.queue?.queuePosition ?? "—"}</td>
+                          <td data-label="Action" style={S.td}>
                             <button
                               style={S.cancelBtn}
-                              onClick={() => { setCancelModal(v); setCancelReason(""); }}
+                              onClick={() => { setCancelModal({ id: v.id, token: v.token, patientName: v.patient.name }); setCancelReason(""); }}
                               disabled={cancelling === v.id}
                             >
                               Cancel
@@ -167,11 +168,11 @@ export default function AdminDashboard() {
               {appointments.length === 0 ? (
                 <div style={S.emptyQueue}>No upcoming appointments scheduled.</div>
               ) : (
-                <div style={S.tableWrap}>
-                  <table style={S.table}>
+                <div className="ad-table-wrap" style={S.tableWrap}>
+                  <table className="ad-table" style={S.table}>
                     <thead>
                       <tr>
-                        {["Token", "Patient", "PRN", "Appointment Date", "Reason", "Doctor"].map(h => (
+                        {["Token", "Patient", "PRN", "Appointment Date", "Reason", "Doctor", "Action"].map(h => (
                           <th key={h} style={S.th}>{h}</th>
                         ))}
                       </tr>
@@ -179,14 +180,23 @@ export default function AdminDashboard() {
                     <tbody>
                       {appointments.map(a => (
                         <tr key={a.id} style={S.tr}>
-                          <td style={{ ...S.td, fontWeight: 800, fontSize: 16 }}>{a.token}</td>
-                          <td style={S.td}>{a.patient.name}</td>
-                          <td style={{ ...S.td, color: "#888", fontSize: 12 }}>{a.patient.prn}</td>
-                          <td style={{ ...S.td, fontWeight: 700, color: "#2563EB" }}>
+                          <td data-label="Token" style={{ ...S.td, fontWeight: 800, fontSize: 16 }}>{a.token}</td>
+                          <td data-label="Patient" style={S.td}>{a.patient.name}</td>
+                          <td data-label="PRN" style={{ ...S.td, color: "#888", fontSize: 12 }}>{a.patient.prn}</td>
+                          <td data-label="Date" style={{ ...S.td, fontWeight: 700, color: "#2563EB" }}>
                             {new Date(a.appointmentDate).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
                           </td>
-                          <td style={{ ...S.td, color: "#555", fontSize: 13 }}>{a.healthIssue ?? <span style={{ color: "#ccc" }}>—</span>}</td>
-                          <td style={S.td}>{a.doctor?.user.name ?? <span style={{ color: "#aaa" }}>Unassigned</span>}</td>
+                          <td data-label="Reason" style={{ ...S.td, color: "#555", fontSize: 13 }}>{a.healthIssue ?? <span style={{ color: "#ccc" }}>—</span>}</td>
+                          <td data-label="Doctor" style={S.td}>{a.doctor?.user.name ?? <span style={{ color: "#aaa" }}>Unassigned</span>}</td>
+                          <td data-label="Action" style={S.td}>
+                            <button
+                              style={S.cancelBtn}
+                              onClick={() => { setCancelModal({ id: a.id, token: a.token, patientName: a.patient.name }); setCancelReason(""); }}
+                              disabled={cancelling === a.id}
+                            >
+                              Cancel
+                            </button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -202,20 +212,67 @@ export default function AdminDashboard() {
         <div style={S.modalOverlay} onClick={() => setCancelModal(null)}>
           <div style={S.modal} onClick={e => e.stopPropagation()}>
             <h3 style={S.modalTitle}>Cancel Visit</h3>
-            <p style={S.modalSub}>Cancel token <strong>{cancelModal.token}</strong> for <strong>{cancelModal.patient.name}</strong>?</p>
+            <p style={S.modalSub}>Cancel token <strong>{cancelModal.token}</strong> for <strong>{cancelModal.patientName}</strong>?</p>
             <div style={{ marginBottom: 16 }}>
-              <label style={S.fieldLabel}>Reason (optional)</label>
-              <input style={S.input} value={cancelReason} onChange={e => setCancelReason(e.target.value)} placeholder="Reason for cancellation…" />
+              <label style={S.fieldLabel}>Closure Note <span style={{ color: "#DC2626" }}>*</span></label>
+              <input style={S.input} value={cancelReason} onChange={e => setCancelReason(e.target.value)} placeholder="Reason for cancellation — shown to patient" />
+              {!cancelReason.trim() && <span style={{ fontSize: 11, color: "#DC2626", marginTop: 4, display: "block" }}>A closure note is required.</span>}
             </div>
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
               <button style={S.modalCancelBtn} onClick={() => setCancelModal(null)}>Keep Visit</button>
-              <button style={S.modalConfirmBtn} onClick={cancelVisit} disabled={!!cancelling}>
+              <button style={{ ...S.modalConfirmBtn, opacity: cancelReason.trim() ? 1 : 0.4, cursor: cancelReason.trim() ? "pointer" : "not-allowed" }} onClick={cancelVisit} disabled={!!cancelling || !cancelReason.trim()}>
                 {cancelling ? "Cancelling…" : "Yes, Cancel"}
               </button>
             </div>
           </div>
         </div>
       )}
+
+      <style>{`
+        input::placeholder, textarea::placeholder { color: #888 !important; opacity: 1; }
+        select option { color: #111; }
+        @media (max-width: 639px) {
+          .ad-main   { padding: 16px 14px !important; }
+          .ad-stats  { grid-template-columns: repeat(2, 1fr) !important; gap: 8px !important; }
+          .ad-action { width: 100% !important; }
+          .ad-action button { width: 100% !important; text-align: center; }
+          .ad-table-wrap { overflow-x: visible !important; }
+          .ad-table thead { display: none; }
+          .ad-table tbody tr {
+            display: block;
+            border-radius: 12px;
+            border: 1.5px solid #E8E6E3 !important;
+            margin-bottom: 10px;
+            padding: 2px 0;
+            background: #fff;
+          }
+          .ad-table tbody td {
+            display: flex !important;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 9px 14px !important;
+            border-bottom: 1px solid #F5F3F0;
+            font-size: 13px !important;
+            text-align: left !important;
+          }
+          .ad-table tbody td:last-child { border-bottom: none; }
+          .ad-table tbody td::before {
+            content: attr(data-label);
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            color: #999;
+            min-width: 80px;
+            flex-shrink: 0;
+          }
+        }
+        @media (min-width: 640px) and (max-width: 1023px) {
+          .ad-main  { padding: 24px 18px !important; }
+          .ad-stats { grid-template-columns: repeat(4, 1fr) !important; }
+        }
+      `}</style>
     </div>
   );
 }
@@ -242,12 +299,12 @@ const S: Record<string, React.CSSProperties> = {
   td:             { padding: "12px 12px", fontSize: 13.5, color: "#333" },
   statusPill:     { fontSize: 11.5, fontWeight: 700, padding: "3px 10px", borderRadius: 12 },
   cancelBtn:      { padding: "5px 12px", background: "#FEE2E2", color: "#DC2626", border: "1px solid #FECACA", borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: "pointer" },
-  modalOverlay:   { position: "fixed" as const, inset: 0, background: "rgba(0,0,0,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 },
+  modalOverlay:   { position: "fixed" as const, inset: 0, background: "rgba(0,0,0,.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200, padding: 16 },
   modal:          { background: "#fff", borderRadius: 16, padding: "28px 32px", width: "100%", maxWidth: 420, boxShadow: "0 20px 60px rgba(0,0,0,.18)" },
   modalTitle:     { fontSize: 17, fontWeight: 700, color: "#0C1929", marginBottom: 8 },
   modalSub:       { fontSize: 13.5, color: "#555", marginBottom: 20, lineHeight: 1.5 },
   fieldLabel:     { display: "block", fontSize: 11, fontWeight: 700, color: "#666", letterSpacing: ".07em", textTransform: "uppercase" as const, marginBottom: 6 },
-  input:          { width: "100%", padding: "10px 14px", border: "1.5px solid #E2E0DC", borderRadius: 9, fontSize: 14, outline: "none", boxSizing: "border-box" as const },
+  input:          { width: "100%", padding: "10px 14px", border: "1.5px solid #E2E0DC", borderRadius: 9, fontSize: 14, outline: "none", boxSizing: "border-box" as const, color: "#111", background: "#FDFCFB" },
   modalCancelBtn: { padding: "10px 18px", background: "transparent", color: "#555", border: "1.5px solid #D0CEC9", borderRadius: 9, fontSize: 13.5, fontWeight: 600, cursor: "pointer" },
   modalConfirmBtn:{ padding: "10px 18px", background: "#DC2626", color: "#fff", border: "none", borderRadius: 9, fontSize: 13.5, fontWeight: 600, cursor: "pointer" },
 };
