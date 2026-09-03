@@ -24,6 +24,8 @@ export async function GET(req: NextRequest) {
     const { prisma } = await import("@/lib/prisma");
     const doctor = await prisma.doctor.findUnique({ where: { userId: jwt.id } });
     if (doctor) rooms.push(`doctor:${doctor.id}`);
+  } else if (role === "NURSE") {
+    rooms.push("nurse");
   } else if (role === "PATIENT") {
     // Derive room from DB — never trust client-supplied patientId
     const { prisma } = await import("@/lib/prisma");

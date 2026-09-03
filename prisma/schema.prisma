@@ -12,6 +12,7 @@ datasource db {
 enum Role {
   ADMIN
   DOCTOR
+  NURSE
   PATIENT
 }
 
@@ -44,8 +45,20 @@ model User {
   createdAt          DateTime @default(now())
 
   doctorProfile  Doctor?
+  nurseProfile   Nurse?
   patientProfile Patient?
   auditLogs      AuditLog[]
+}
+
+// ── Nurse ─────────────────────────────────────────────────────────────────────
+
+model Nurse {
+  id        String  @id @default(cuid())
+  userId    String  @unique
+  user      User    @relation(fields: [userId], references: [id])
+  approved  Boolean @default(false)
+
+  vitalsRecorded Vitals[]
 }
 
 // ── Doctor ────────────────────────────────────────────────────────────────────
@@ -118,6 +131,7 @@ model Visit {
   doctor  Doctor?  @relation(fields: [doctorId], references: [id])
   history PatientHistory?
   queue   Queue?
+  vitals  Vitals?
 
   @@index([visitDate])
   @@index([status])
@@ -167,6 +181,34 @@ model DoctorConsultation {
 
   doctor  Doctor         @relation(fields: [doctorId], references: [id])
   history PatientHistory @relation(fields: [historyId], references: [id])
+}
+
+// ── Vitals (per visit, recorded by nurse) ────────────────────────────────────
+
+model Vitals {
+  id          String   @id @default(cuid())
+  visitId     String   @unique
+  nurseId     String?
+  requestedBy String?           // Doctor userId who requested additional vitals
+
+  systolicBP  Int?              // mmHg
+  diastolicBP Int?              // mmHg
+  bloodSugar  Float?            // mg/dL
+  temperature Float?            // °C
+  pulse       Int?              // bpm
+  spo2        Int?              // % oxygen saturation
+  weight      Float?            // kg
+  height      Float?            // cm
+  hemoglobin  Float?            // g/dL
+  wbc         Float?            // x10³/μL white blood cells
+  platelets   Float?            // x10³/μL
+  urineRoutine String?          // free-text urine report
+  notes       String?
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  visit Visit @relation(fields: [visitId], references: [id])
+  nurse Nurse? @relation(fields: [nurseId], references: [id])
 }
 
 // ── Concurrency-safe daily counters ──────────────────────────────────────────

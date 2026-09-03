@@ -2,16 +2,19 @@ import { z } from "zod";
 
 // ── Email domain rules ────────────────────────────────────────────────────────
 const ADMIN_RE    = /^[a-zA-Z0-9]+\.admin@hospital\.com$/i;
+const NURSE_RE    = /^[a-zA-Z0-9]+\.nurse@hospital\.com$/i;
 const HOSPITAL_RE = /@hospital\.com$/i;
 
-export function detectRoleFromEmail(email: string): "ADMIN" | "DOCTOR" | "PATIENT" {
+export function detectRoleFromEmail(email: string): "ADMIN" | "DOCTOR" | "NURSE" | "PATIENT" {
   if (ADMIN_RE.test(email))    return "ADMIN";
+  if (NURSE_RE.test(email))    return "NURSE";
   if (HOSPITAL_RE.test(email)) return "DOCTOR";
   return "PATIENT";
 }
 
 export function isPatientEmail(email: string)  { return !HOSPITAL_RE.test(email); }
-export function isDoctorEmail(email: string)   { return HOSPITAL_RE.test(email) && !ADMIN_RE.test(email); }
+export function isNurseEmail(email: string)    { return NURSE_RE.test(email); }
+export function isDoctorEmail(email: string)   { return HOSPITAL_RE.test(email) && !ADMIN_RE.test(email) && !NURSE_RE.test(email); }
 export function isAdminEmail(email: string)    { return ADMIN_RE.test(email); }
 
 // ── Staff login (Admin / Doctor) — email + password ──────────────────────────
