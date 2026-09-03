@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, lazy, Suspense } from "react";
+const ReportsTab = lazy(() => import("@/components/patient/ReportsTab"));
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 
@@ -12,15 +13,23 @@ interface DashboardData {
   upcomingAppointments:  { id: string; visitId: string; appointmentDate: string; healthIssue?: string; status: string }[];
 }
 
-interface HistoryItem {
+interface VisitRecord {
   id: string;
-  prescription?: string;
-  healthNotes?: string;
-  consultationStart: string;
-  consultationEnd?: string;
-  duration?: number;
-  doctor: { user: { name: string } };
-  visit:  { token: string; visitId: string; visitDate: string };
+  token: string;
+  visitId: string;
+  visitDate: string;
+  status: string;
+  healthIssue?: string;
+  cancelReason?: string;
+  doctor?: { user: { name: string } } | null;
+  history?: {
+    id: string;
+    prescription?: string;
+    healthNotes?: string;
+    consultationStart: string;
+    consultationEnd?: string;
+    duration?: number;
+  } | null;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -35,12 +44,12 @@ const STATUS_COLOR: Record<string, string> = {
 export default function PatientDashboard() {
   const router = useRouter();
   const [data, setData]           = useState<DashboardData | null>(null);
-  const [history, setHistory]     = useState<HistoryItem[]>([]);
+  const [history, setHistory]     = useState<VisitRecord[]>([]);
   const [loading, setLoading]     = useState(true);
   const [joining, setJoining]     = useState(false);
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [cancelConfirm, setCancelConfirm] = useState<string | null>(null);
-  const [tab, setTab]             = useState<"today" | "appointments" | "history">("today");
+  const [tab, setTab]             = useState<"today" | "appointments" | "history" | "reports">("today");
   const [healthIssue, setHealthIssue] = useState("");
   const [queuePayment, setQueuePayment] = useState("Cash");
   const [adminCancelNote, setAdminCancelNote] = useState<string | null>(null);
@@ -67,7 +76,7 @@ export default function PatientDashboard() {
       fetch("/api/patient/history").then(r => r.json()),
     ]);
     setData(d);
-    setHistory(h.histories ?? []);
+    setHistory(h.visits ?? []);
     if (d.patient?.id) patientIdRef.current = d.patient.id;
   };
 
@@ -204,6 +213,7 @@ export default function PatientDashboard() {
             Appointments {upcomingAppointments?.length > 0 && <span style={S.badge}>{upcomingAppointments.length}</span>}
           </button>
           <button style={{ ...S.tab, ...(tab === "history"      ? S.tabActive : {}) }} onClick={() => setTab("history")}>Consultation History</button>
+          <button style={{ ...S.tab, ...(tab === "reports"      ? S.tabActive : {}) }} onClick={() => setTab("reports")}>My Reports</button>
         </div>
 
         {/* ── Today tab ─────────────────────────────────────────────────── */}
@@ -365,35 +375,64 @@ export default function PatientDashboard() {
             {history.length === 0 ? (
               <div style={S.emptyCard}>
                 <div style={S.emptyIcon}>📂</div>
-                <div style={S.emptyText}>No consultation history yet.</div>
+                <div style={S.emptyText}>No visit history yet.</div>
               </div>
             ) : (
               <div style={S.historyList}>
-                {history.map(h => (
-                  <div key={h.id} style={S.historyCard}>
-                    <div className="pp-appt-header" style={S.historyHeader}>
-                      <div>
-                        <span style={S.historyToken}>{h.visit.token}</span>
-                        <span style={S.historyDate}>{new Date(h.visit.visitDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span>
+                {history.map(v => {
+                  const completed = v.status === "COMPLETED";
+                  const cancelled = v.status === "CANCELLED";
+                  const dotColor = completed ? "#059669" : cancelled ? "#DC2626" : STATUS_COLOR[v.status] ?? "#9CA3AF";
+                  return (
+                    <div key={v.id} style={{ ...S.historyCard, borderLeft: `4px solid ${dotColor}`, opacity: cancelled ? 0.85 : 1 }}>
+                      <div className="pp-appt-header" style={S.historyHeader}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <span style={S.historyToken}>{v.token}</span>
+                          <span style={S.historyDate}>{new Date(v.visitDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span>
+                          <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 8, background: dotColor + "18", color: dotColor }}>
+                            {STATUS_LABEL[v.status] ?? v.status}
+                          </span>
+                        </div>
+                        {v.doctor && <span style={S.historyDoctor}>{v.doctor.user.name}</span>}
                       </div>
-                      <span style={S.historyDoctor}>{h.doctor.user.name}</span>
-                    </div>
-                    {h.healthNotes && <div style={S.historySection}><div style={S.sectionLabel}>Health Notes</div><div style={S.sectionText}>{h.healthNotes}</div></div>}
-                    {h.prescription && <div style={S.historySection}><div style={S.sectionLabel}>Prescription</div><div style={S.sectionText}>{h.prescription}</div></div>}
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 10 }}>
-                      {h.duration ? <div style={S.historyFooter}>Duration: {Math.round(h.duration / 60)} min</div> : <div />}
-                      {h.prescription && (
-                        <a href={`/prescription/${h.id}`} target="_blank" rel="noopener noreferrer"
-                          style={{ fontSize: 12.5, fontWeight: 700, color: "#2563EB", textDecoration: "none", padding: "5px 14px", border: "1.5px solid #BFDBFE", borderRadius: 7, background: "#EFF6FF" }}>
-                          🖨️ Print Prescription
-                        </a>
+                      {v.healthIssue && (
+                        <div style={S.historySection}>
+                          <div style={S.sectionLabel}>Reported Symptoms</div>
+                          <div style={S.sectionText}>{v.healthIssue}</div>
+                        </div>
                       )}
+                      {cancelled && v.cancelReason && (
+                        <div style={{ margin: "8px 0", padding: "8px 12px", background: "#FEF2F2", borderRadius: 8, fontSize: 13, color: "#DC2626" }}>
+                          <strong>Cancellation reason:</strong> {v.cancelReason}
+                        </div>
+                      )}
+                      {v.history?.healthNotes && (
+                        <div style={S.historySection}><div style={S.sectionLabel}>Health Notes</div><div style={S.sectionText}>{v.history.healthNotes}</div></div>
+                      )}
+                      {v.history?.prescription && (
+                        <div style={S.historySection}><div style={S.sectionLabel}>Prescription</div><div style={S.sectionText}>{v.history.prescription}</div></div>
+                      )}
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 10 }}>
+                        {v.history?.duration ? <div style={S.historyFooter}>Duration: {Math.round(v.history.duration / 60)} min</div> : <div />}
+                        {v.history?.prescription && (
+                          <a href={`/prescription/${v.history.id}`} target="_blank" rel="noopener noreferrer"
+                            style={{ fontSize: 12.5, fontWeight: 700, color: "#2563EB", textDecoration: "none", padding: "5px 14px", border: "1.5px solid #BFDBFE", borderRadius: 7, background: "#EFF6FF" }}>
+                            🖨️ Print Prescription
+                          </a>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
+        )}
+        {/* ── Reports tab ────────────────────────────────────────────────── */}
+        {tab === "reports" && (
+          <Suspense fallback={<div style={{ padding: "40px 0", textAlign: "center", color: "#aaa" }}>Loading…</div>}>
+            <ReportsTab prn={patient.prn} />
+          </Suspense>
         )}
       </main>
 

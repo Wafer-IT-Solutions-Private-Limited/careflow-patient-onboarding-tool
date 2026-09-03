@@ -11,10 +11,17 @@ interface DoctorInfo { id: string; availability: Availability; specialization: s
 interface PatientInfo { prn: string; name: string; gender?: string; priority: string; healthIssues?: string }
 interface VisitSummary { id: string; token: string; visitId: string; status: string; healthIssue?: string; patient: PatientInfo }
 interface HistoryRecord { id: string; prescription?: string; healthNotes?: string }
+interface VitalsRecord {
+  systolicBP: number | null; diastolicBP: number | null; bloodSugar: number | null;
+  temperature: number | null; pulse: number | null; spo2: number | null;
+  weight: number | null; height: number | null; hemoglobin: number | null;
+  wbc: number | null; platelets: number | null; urineRoutine: string | null; notes: string | null;
+  requestedBy: string | null; requiredFields: string[] | null; updatedAt: string;
+}
 
 interface DashboardData {
   doctor:         DoctorInfo;
-  currentVisit:   (VisitSummary & { healthIssue?: string; patient: PatientInfo & { id?: string }; history?: HistoryRecord }) | null;
+  currentVisit:   (VisitSummary & { healthIssue?: string; patient: PatientInfo & { id?: string }; history?: HistoryRecord; vitals?: VitalsRecord | null }) | null;
   queuedVisits:   VisitSummary[];
   todayCompleted: number;
 }
@@ -47,6 +54,9 @@ export default function DoctorDashboard() {
   const [data, setData]                 = useState<DashboardData | null>(null);
   const [loading, setLoading]           = useState(true);
   const [saving, setSaving]             = useState(false);
+  const [requestingVitals, setRequestingVitals] = useState(false);
+  const [showVitalsModal, setShowVitalsModal]   = useState(false);
+  const [selectedFields, setSelectedFields]     = useState<string[]>([]);
   const [prescription, setPrescription] = useState("");
   const [healthNotes, setHealthNotes]   = useState("");
 
@@ -65,6 +75,22 @@ export default function DoctorDashboard() {
   const [patientHistory, setPatientHistory]         = useState<PatientHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading]         = useState(false);
 
+  // Patient reports (read-only, only during IN_CONSULTATION)
+  interface PatientReportMeta { id: string; name: string; mimeType: string; fileSize: number; extractedText: string | null; ocrUsed: boolean; uploadedAt: string; }
+  const [patientReports, setPatientReports]         = useState<PatientReportMeta[]>([]);
+  const [reportsExpanded, setReportsExpanded]       = useState<string | null>(null);
+  const [reportsLoading, setReportsLoading]         = useState(false);
+  const [reportsView, setReportsView]               = useState<Record<string, "text" | "file">>({}); // per-report view toggle
+
+  const loadPatientReports = async (patientId: string) => {
+    setReportsLoading(true);
+    setPatientReports([]);
+    try {
+      const res = await fetch(`/api/doctor/patient-reports?patientId=${patientId}`);
+      if (res.ok) { const d = await res.json(); setPatientReports(d.reports ?? []); }
+    } catch { /* ignore */ } finally { setReportsLoading(false); }
+  };
+
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login");
@@ -82,6 +108,11 @@ export default function DoctorDashboard() {
     } else {
       setPrescription(""); setHealthNotes("");
     }
+    if (d.currentVisit?.patient?.id) {
+      loadPatientReports(d.currentVisit.patient.id);
+    } else {
+      setPatientReports([]);
+    }
   };
 
   useEffect(() => {
@@ -91,7 +122,7 @@ export default function DoctorDashboard() {
       es.onmessage = (e) => {
         try {
           const event = JSON.parse(e.data);
-          if (["queue:updated","patient:called","visit:cancelled","doctor:status"].includes(event.type)) {
+          if (["queue:updated","patient:called","visit:cancelled","doctor:status","vitals:updated"].includes(event.type)) {
             load();
           }
         } catch { /* ignore */ }
@@ -224,6 +255,44 @@ export default function DoctorDashboard() {
     setSaving(false);
   };
 
+  const VITAL_OPTIONS = [
+    { key: "bp",          label: "Blood Pressure" },
+    { key: "pulse",       label: "Pulse" },
+    { key: "spo2",        label: "SpO₂" },
+    { key: "temperature", label: "Temperature" },
+    { key: "bloodSugar",  label: "Blood Sugar" },
+    { key: "weight",      label: "Weight" },
+    { key: "height",      label: "Height" },
+    { key: "hemoglobin",  label: "Hemoglobin" },
+    { key: "wbc",         label: "WBC" },
+    { key: "platelets",   label: "Platelets" },
+    { key: "urineRoutine",label: "Urine Routine" },
+  ];
+
+  const openVitalsModal = () => {
+    setSelectedFields([]);
+    setShowVitalsModal(true);
+  };
+
+  const toggleField = (key: string) => {
+    setSelectedFields(prev =>
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+    );
+  };
+
+  const requestVitals = async () => {
+    if (!data?.currentVisit) return;
+    setRequestingVitals(true);
+    setShowVitalsModal(false);
+    const res = await fetch("/api/doctor/vitals-request", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ visitId: data.currentVisit.id, requiredFields: selectedFields }),
+    });
+    if (res.ok) toast.success(selectedFields.length > 0 ? `Requested: ${selectedFields.length} vital(s)` : "Vitals request sent to nurse");
+    else { const d = await res.json(); toast.error(d.error ?? "Failed to request vitals"); }
+    setRequestingVitals(false);
+  };
+
   const viewHistory = async (patientId: string) => {
     setHistoryLoading(true);
     setHistoryPatientId(patientId);
@@ -329,6 +398,129 @@ export default function DoctorDashboard() {
                     </div>
                   ) : null;
                 })()}
+
+                {/* Vitals Panel */}
+                {(() => {
+                  const v = currentVisit.vitals;
+                  const vitalItems = v ? [
+                    { label: "BP", value: v.systolicBP && v.diastolicBP ? `${v.systolicBP}/${v.diastolicBP} mmHg` : null },
+                    { label: "Blood Sugar", value: v.bloodSugar ? `${v.bloodSugar} mg/dL` : null },
+                    { label: "Temperature", value: v.temperature ? `${v.temperature} °F` : null },
+                    { label: "Pulse", value: v.pulse ? `${v.pulse} bpm` : null },
+                    { label: "SpO₂", value: v.spo2 ? `${v.spo2}%` : null },
+                    { label: "Weight", value: v.weight ? `${v.weight} kg` : null },
+                    { label: "Height", value: v.height ? `${v.height} cm` : null },
+                    { label: "Hemoglobin", value: v.hemoglobin ? `${v.hemoglobin} g/dL` : null },
+                    { label: "WBC", value: v.wbc ? `${v.wbc} ×10³/μL` : null },
+                    { label: "Platelets", value: v.platelets ? `${v.platelets} ×10³/μL` : null },
+                    { label: "Urine Routine", value: v.urineRoutine ?? null },
+                    { label: "Notes", value: v.notes ?? null },
+                  ].filter(i => i.value) : [];
+                  return (
+                    <div style={{ margin: "12px 0", padding: "14px 16px", background: v ? "#F0FDF4" : "#F8F7F5", borderRadius: 10, border: `1.5px solid ${v ? "#86EFAC" : "#E5E3DF"}` }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: vitalItems.length > 0 ? 10 : 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: v ? "#166534" : "#888", textTransform: "uppercase", letterSpacing: ".05em" }}>
+                          {v ? "✓ Vitals Recorded" : "Vitals"}
+                        </div>
+                        <button
+                          onClick={openVitalsModal}
+                          disabled={requestingVitals}
+                          style={{ fontSize: 12, fontWeight: 700, padding: "5px 14px", borderRadius: 7, border: "1.5px solid #0C1929", background: requestingVitals ? "#6B7280" : "#0C1929", color: "#fff", cursor: requestingVitals ? "not-allowed" : "pointer" }}
+                        >
+                          {requestingVitals ? "Sending…" : v ? "Request More Vitals" : "Request Vitals from Nurse"}
+                        </button>
+                      </div>
+                      {vitalItems.length > 0 && (
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(140px,1fr))", gap: 8 }}>
+                          {vitalItems.map(i => (
+                            <div key={i.label} style={{ background: "#fff", borderRadius: 8, padding: "7px 10px", border: "1px solid #D1FAE5" }}>
+                              <div style={{ fontSize: 10, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 2 }}>{i.label}</div>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>{i.value}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {v && (
+                        <div style={{ fontSize: 11, color: "#6B7280", marginTop: 8 }}>
+                          Last updated: {new Date(v.updatedAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Patient Reports — read-only, only during IN_CONSULTATION */}
+                <div style={{ background: "#F0F9FF", border: "1px solid #BAE6FD", borderRadius: 10, padding: "14px 16px", marginBottom: 16 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#0369A1", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: reportsLoading || patientReports.length > 0 ? 10 : 0 }}>
+                    Patient Reports {reportsLoading ? "…" : `(${patientReports.length})`}
+                  </div>
+                  {reportsLoading ? (
+                    <div style={{ fontSize: 12, color: "#aaa" }}>Loading…</div>
+                  ) : patientReports.length === 0 ? (
+                    <div style={{ fontSize: 12, color: "#94A3B8" }}>No reports uploaded by this patient.</div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {patientReports.map(r => {
+                        const isExpanded = reportsExpanded === r.id;
+                        const view = reportsView[r.id] ?? "file";
+                        const fileUrl = `/api/doctor/patient-reports/${r.id}/file`;
+                        return (
+                          <div key={r.id} style={{ background: "#fff", borderRadius: 8, border: "1px solid #E0F2FE", overflow: "hidden" }}>
+                            {/* Header row */}
+                            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", cursor: "pointer" }}
+                              onClick={() => setReportsExpanded(isExpanded ? null : r.id)}>
+                              <span style={{ fontSize: 16 }}>{r.mimeType === "application/pdf" ? "📄" : "🖼️"}</span>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 13, fontWeight: 700, color: "#111", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</div>
+                                <div style={{ fontSize: 10, color: "#aaa" }}>
+                                  {new Date(r.uploadedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                                  {r.ocrUsed && <span style={{ marginLeft: 8, color: "#7C3AED", fontWeight: 700 }}>• OCR</span>}
+                                </div>
+                              </div>
+                              <span style={{ fontSize: 11, color: "#888" }}>{isExpanded ? "▲" : "▼"}</span>
+                            </div>
+
+                            {isExpanded && (
+                              <div style={{ borderTop: "1px solid #E0F2FE", padding: "10px 12px" }}>
+                                {/* Toggle: File view / Extracted text */}
+                                <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+                                  {(["file", "text"] as const).map(v => (
+                                    <button key={v} onClick={() => setReportsView(prev => ({ ...prev, [r.id]: v }))}
+                                      style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 6, border: "1.5px solid #0369A1",
+                                        background: view === v ? "#0369A1" : "transparent", color: view === v ? "#fff" : "#0369A1", cursor: "pointer" }}>
+                                      {v === "file" ? (r.mimeType === "application/pdf" ? "📄 PDF" : "🖼️ Image") : "📝 Extracted Text"}
+                                    </button>
+                                  ))}
+                                </div>
+
+                                {view === "file" ? (
+                                  r.mimeType === "application/pdf" ? (
+                                    <iframe src={fileUrl} title={r.name}
+                                      style={{ width: "100%", height: 420, border: "1px solid #E0F2FE", borderRadius: 6 }} />
+                                  ) : (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img src={fileUrl} alt={r.name}
+                                      style={{ maxWidth: "100%", maxHeight: 400, borderRadius: 6, border: "1px solid #E0F2FE", display: "block" }} />
+                                  )
+                                ) : (
+                                  r.extractedText ? (
+                                    <pre style={{ fontSize: 11.5, color: "#334155", background: "#F8FAFC", borderRadius: 6, padding: "8px 10px", whiteSpace: "pre-wrap", maxHeight: 300, overflowY: "auto", fontFamily: "ui-monospace, monospace", lineHeight: 1.5, margin: 0 }}>
+                                      {r.extractedText}
+                                    </pre>
+                                  ) : (
+                                    <div style={{ fontSize: 12, color: "#aaa", fontStyle: "italic" }}>
+                                      No text could be extracted — view the file directly above.
+                                    </div>
+                                  )
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
 
                 {/* Health Notes Field */}
                 <div style={S.field}>
@@ -481,6 +673,58 @@ export default function DoctorDashboard() {
           .dr-stats { grid-template-columns: repeat(3, 1fr) !important; }
         }
       `}</style>
+
+      {/* Vitals Request Modal */}
+      {showVitalsModal && (
+        <div style={S.modalOverlay} onClick={() => setShowVitalsModal(false)}>
+          <div style={{ ...S.modal, maxWidth: 480 }} onClick={e => e.stopPropagation()}>
+            <div style={S.modalHeader}>
+              <div>
+                <div style={S.modalTitle}>Request Vitals from Nurse</div>
+                <div style={S.modalSub}>Select which vitals are mandatory. Nurse cannot submit without them.</div>
+              </div>
+              <button style={S.modalClose} onClick={() => setShowVitalsModal(false)}>✕</button>
+            </div>
+            <div style={{ padding: "16px 28px 8px" }}>
+              {/* All toggle */}
+              <label style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid #F0EEEB", cursor: "pointer", marginBottom: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={selectedFields.length === VITAL_OPTIONS.length}
+                  onChange={e => setSelectedFields(e.target.checked ? VITAL_OPTIONS.map(o => o.key) : [])}
+                  style={{ width: 16, height: 16, accentColor: "#0C1929" }}
+                />
+                <span style={{ fontWeight: 700, fontSize: 13, color: "#0C1929" }}>All Vitals</span>
+              </label>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 16px" }}>
+                {VITAL_OPTIONS.map(o => (
+                  <label key={o.key} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedFields.includes(o.key)}
+                      onChange={() => toggleField(o.key)}
+                      style={{ width: 15, height: 15, accentColor: "#0C1929" }}
+                    />
+                    <span style={{ fontSize: 13, color: "#333" }}>{o.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 10, padding: "16px 28px 24px" }}>
+              <button onClick={() => setShowVitalsModal(false)} style={{ flex: 1, padding: "10px", background: "transparent", border: "1.5px solid #D0CEC9", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer", color: "#666" }}>
+                Cancel
+              </button>
+              <button
+                onClick={requestVitals}
+                disabled={requestingVitals}
+                style={{ flex: 2, padding: "10px", background: "#0C1929", color: "#fff", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer" }}
+              >
+                {selectedFields.length === 0 ? "Send General Request" : `Request ${selectedFields.length} Vital${selectedFields.length > 1 ? "s" : ""}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Patient History Modal */}
       {historyPatientId && (

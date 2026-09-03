@@ -5,9 +5,10 @@ const PROTECTED: Record<string, string[]> = {
   "/admin":           ["ADMIN"],
   "/doctor":          ["DOCTOR"],
   "/patient":         ["PATIENT"],
+  "/nurse":           ["NURSE"],
   "/walk-in":         ["ADMIN", "DOCTOR"],
   "/health-setup":    ["PATIENT"],
-  "/change-password": ["PATIENT", "ADMIN", "DOCTOR"],
+  "/change-password": ["PATIENT", "ADMIN", "DOCTOR", "NURSE"],
 };
 
 export async function proxy(req: NextRequest) {
