@@ -107,6 +107,25 @@ model Patient {
 
   visits    Visit[]
   histories PatientHistory[]
+  reports   PatientReport[]
+}
+
+// ── Patient Reports (uploaded by patient, readable by assigned doctor) ────────
+
+model PatientReport {
+  id            String   @id @default(cuid())
+  patientId     String
+  name          String
+  mimeType      String
+  fileData      String   @db.Text
+  extractedText String?  @db.Text
+  ocrUsed       Boolean  @default(false)
+  fileSize      Int
+  uploadedAt    DateTime @default(now())
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([patientId])
 }
 
 // ── Visit  (one per patient per day; new token each visit) ───────────────────
@@ -189,7 +208,8 @@ model Vitals {
   id          String   @id @default(cuid())
   visitId     String   @unique
   nurseId     String?
-  requestedBy String?           // Doctor userId who requested additional vitals
+  requestedBy    String?         // Doctor userId who requested additional vitals
+  requiredFields String?         // JSON array of field keys doctor marked mandatory
 
   systolicBP  Int?              // mmHg
   diastolicBP Int?              // mmHg

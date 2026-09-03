@@ -147,6 +147,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       where: { id: { in: activeVisitIds } },
       data: { status: "CANCELLED", cancelReason: "Patient account removed" },
     }),
+    // Hard-delete all uploaded reports — PII/files must not outlive the account
+    prisma.patientReport.deleteMany({ where: { patientId: { in: patientIds } } }),
     // Soft-delete: clear identifiable PII, mark deleted; name/DOB/gender kept for medical records
     prisma.patient.updateMany({
       where: { userId: id },

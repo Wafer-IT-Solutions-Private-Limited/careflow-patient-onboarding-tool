@@ -11,7 +11,7 @@ export type SSEEvent =
   | { type: "doctor:status";      room: "admin"; doctorId: string; availability: string }
   | { type: "patient:registered"; room: "admin"; prn: string }
   | { type: "appointment:booked"; room: `patient:${string}` }
-  | { type: "vitals:requested";   room: "nurse"; visitId: string; doctorId: string; patientName: string }
+  | { type: "vitals:requested";   room: "nurse"; visitId: string; doctorId: string; patientName: string; requiredFields?: string[] }
   | { type: "vitals:updated";     room: `doctor:${string}`; visitId: string };
 
 export function emitSSE(event: SSEEvent) {

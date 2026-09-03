@@ -25,6 +25,7 @@ export async function GET(req: NextRequest) {
         include: {
           patient: true,
           history: true,
+          vitals:  true,
         },
         orderBy: { createdAt: "asc" },
       }),

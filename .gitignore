@@ -48,3 +48,4 @@ strip-*.png
 test-aadhaar.jpeg
 test-ocr-strip.png
 test-scan.mjs
+test-reports/

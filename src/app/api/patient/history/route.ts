@@ -1,8 +1,8 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyToken } from "@/lib/auth";
 
-// GET /api/patient/history
+// GET /api/patient/history — returns ALL visits (completed, cancelled, scheduled, etc.)
 export async function GET(req: NextRequest) {
   try {
     const cookie = req.cookies.get("token");
@@ -13,19 +13,18 @@ export async function GET(req: NextRequest) {
     const patient = await prisma.patient.findFirst({ where: { userId: jwt.id } });
     if (!patient) return NextResponse.json({ error: "Patient profile not found" }, { status: 404 });
 
-    const histories = await prisma.patientHistory.findMany({
+    const visits = await prisma.visit.findMany({
       where: { patientId: patient.id },
       include: {
         doctor: { include: { user: { select: { name: true } } } },
-        visit:  { select: { token: true, visitId: true, visitDate: true } },
+        history: true,
       },
-      orderBy: { consultationStart: "desc" },
+      orderBy: { visitDate: "desc" },
     });
 
-    return NextResponse.json({ histories });
+    return NextResponse.json({ visits });
   } catch (e) {
     const msg = process.env.NODE_ENV === "production" ? "Internal server error" : (e instanceof Error ? e.message : String(e));
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
-
